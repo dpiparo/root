@@ -370,10 +370,31 @@ public:
 
 template <typename F, bool PassSlotNumber = false>
 class TCustomColumn final : public TCustomColumnBase {
+
+   /// A type that throws if assigned to
+   struct ThrowIfAssignedTo {
+      template<typename T>
+      void operator=(const T&) {
+         assert("This `Define`d column returns a non-assignable type. This is not supported.");
+      }
+   };
+
    using FunParamTypes_t = typename CallableTraits<F>::arg_types;
    using BranchTypes_t = typename TDFInternal::RemoveFirstParameterIf<PassSlotNumber, FunParamTypes_t>::type;
    using TypeInd_t = TDFInternal::GenStaticSeq_t<BranchTypes_t::list_size>;
-   using ret_type = typename CallableTraits<F>::ret_type;
+   // We need UpdateHelper to compile even for non-assignable return types of the custom column expression.
+   // In particular the expression `*fLastResultPtr[0] = fExpression(columns...)` would not compile if the returned type
+   // did not have an assignment operator. So we switch non-assignable return types with `ThrowIfAssignedTo` types,
+   // which break on an assertion if someone ever tries to assign to them.
+   // This workaround is required because the code-path that reads values from a data-source always requires compilation
+   // of `TCustomColumn`s of each type that a node takes in input, even though a data-source is not actually present at
+   // runtime, and even though that type is non-assignable.
+   //
+   // The workaround can go away if/when we support data-source columns of non-assignable types, or at least when we
+   // avoid doing those assignments ourselves.
+   using TrueRetType_t = typename CallableTraits<F>::ret_type;
+   using ret_type =
+      typename std::conditional<std::is_copy_assignable<TrueRetType_t>::value, TrueRetType_t, ThrowIfAssignedTo>::type;
 
    F fExpression;
    const ColumnNames_t fBranches;
