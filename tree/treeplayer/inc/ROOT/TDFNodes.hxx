@@ -25,6 +25,7 @@
 #include <tuple>
 #include <cassert>
 #include <climits>
+#include <deque> // std::vector substitute in case of vector<bool>
 
 namespace ROOT {
 
@@ -384,7 +385,7 @@ class TCustomColumn final : public TCustomColumnBase {
    using TypeInd_t = TDFInternal::GenStaticSeq_t<BranchTypes_t::list_size>;
    // We need UpdateHelper to compile even for non-assignable or non-default-constructible return types of the custom
    // column expression.
-   // In particular the expression `*fLastResultPtr[0] = fExpression(columns...)` would not compile if the returned type
+   // In particular the expression `fLastResults[0] = fExpression(columns...)` would not compile if the returned type
    // did not have an assignment operator, and `new ret_type()` would not compile without a default constructor. So we
    // switch these problematic return types with `AbortIfUsed`, which breaks on an assertion if someone ever tries to
    // actually default-construct it, or assign to it.
@@ -403,10 +404,13 @@ class TCustomColumn final : public TCustomColumnBase {
    using ret_type = typename std::conditional<std::is_copy_assignable<TrueRetType_t>::value &&
                                                  std::is_default_constructible<TrueRetType_t>::value,
                                               TrueRetType_t, AbortIfUsed>::type;
+   // Avoid instantiating vector<bool> as `operator[]` returns temporaries in that case. Use std::deque instead.
+   using ValuesPerSlot_t =
+      typename std::conditional<std::is_same<ret_type, bool>::value, std::deque<ret_type>, std::vector<ret_type>>::type;
 
    F fExpression;
    const ColumnNames_t fBranches;
-   std::vector<std::unique_ptr<ret_type>> fLastResultPtr;
+   ValuesPerSlot_t fLastResults;
    std::vector<Long64_t> fLastCheckedEntry = {-1};
 
    std::vector<TDFInternal::TDFValueTuple_t<BranchTypes_t>> fValues;
@@ -414,10 +418,8 @@ class TCustomColumn final : public TCustomColumnBase {
 public:
    TCustomColumn(std::string_view name, F &&expression, const ColumnNames_t &bl, TLoopManager *lm)
       : TCustomColumnBase(lm, name, lm->GetNSlots()), fExpression(std::move(expression)), fBranches(bl),
-        fLastResultPtr(fNSlots), fLastCheckedEntry(fNSlots, -1), fValues(fNSlots)
+        fLastResults(fNSlots), fLastCheckedEntry(fNSlots, -1), fValues(fNSlots)
    {
-      std::generate(fLastResultPtr.begin(), fLastResultPtr.end(),
-                    []() { return std::unique_ptr<ret_type>(new ret_type()); });
    }
 
    TCustomColumn(const TCustomColumn &) = delete;
@@ -429,7 +431,7 @@ public:
                                  fImplPtr->GetBookedColumns(), TypeInd_t());
    }
 
-   void *GetValuePtr(unsigned int slot) final { return static_cast<void *>(fLastResultPtr[slot].get()); }
+   void *GetValuePtr(unsigned int slot) final { return static_cast<void *>(&fLastResults[slot]); }
 
    void Update(unsigned int slot, Long64_t entry) final
    {
@@ -446,7 +448,7 @@ public:
    void UpdateHelper(unsigned int slot, Long64_t entry, TDFInternal::StaticSeq<S...>, TypeList<BranchTypes...>,
                      std::true_type /*shouldPassSlotNumber*/)
    {
-      *fLastResultPtr[slot] = fExpression(slot, std::get<S>(fValues[slot]).Get(entry)...);
+      fLastResults[slot] = fExpression(slot, std::get<S>(fValues[slot]).Get(entry)...);
       // silence "unused parameter" warnings in gcc
       (void)slot;
       (void)entry;
@@ -456,7 +458,7 @@ public:
    void UpdateHelper(unsigned int slot, Long64_t entry, TDFInternal::StaticSeq<S...>, TypeList<BranchTypes...>,
                      std::false_type /*shouldPassSlotNumber*/)
    {
-      *fLastResultPtr[slot] = fExpression(std::get<S>(fValues[slot]).Get(entry)...);
+      fLastResults[slot] = fExpression(std::get<S>(fValues[slot]).Get(entry)...);
       // silence "unused parameter" warnings in gcc
       (void)slot;
       (void)entry;
