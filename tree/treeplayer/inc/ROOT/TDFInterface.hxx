@@ -1322,9 +1322,9 @@ private:
       assert(fDataSource != nullptr);
       const auto nSlots = fProxiedPtr->GetNSlots();
       auto readers = fDataSource->GetColumnReaders<T>(name, nSlots);
-      auto getValuePtr = [readers](unsigned int slot) { return *readers[slot]; };
-      using NewCol_t = TDFDetail::TCustomColumn<decltype(getValuePtr), true, true>;
-      lm.Book(std::make_shared<NewCol_t>(name, std::move(getValuePtr), ColumnNames_t{}, &lm));
+      auto getValue = [readers](unsigned int slot) { return **readers[slot]; };
+      using NewCol_t = TDFDetail::TCustomColumn<decltype(getValue), true>;
+      lm.Book(std::make_shared<NewCol_t>(name, std::move(getValue), ColumnNames_t{}, &lm));
       lm.AddDataSourceColumn(name);
    }
 

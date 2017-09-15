@@ -369,13 +369,41 @@ public:
    unsigned int GetNSlots() const { return fNSlots; }
 };
 
-template <typename F, bool PassSlotNumber = false, bool IsDataSourceColumn = false>
+template <typename F, bool PassSlotNumber = false>
 class TCustomColumn final : public TCustomColumnBase {
+
+   /// A type that throws if default-constructed or assigned to (which is all TCustomColumn will do with it)
+   struct AbortIfUsed {
+      template<typename T>
+      void operator=(const T&) {
+         assert(false && "This `Define`d column returns a non-assignable type. This is not supported.");
+      }
+   };
 
    using FunParamTypes_t = typename CallableTraits<F>::arg_types;
    using BranchTypes_t = typename TDFInternal::RemoveFirstParameterIf<PassSlotNumber, FunParamTypes_t>::type;
    using TypeInd_t = TDFInternal::GenStaticSeq_t<BranchTypes_t::list_size>;
-   using ret_type = typename CallableTraits<F>::ret_type;
+   // We need UpdateHelper to compile even for non-assignable or non-default-constructible return types of the custom
+   // column expression.
+   // In particular the expression `fLastResults[0] = fExpression(columns...)` would not compile if the returned type
+   // did not have an assignment operator, and `new ret_type()` would not compile without a default constructor. So we
+   // switch these problematic return types with `AbortIfUsed`, which breaks on an assertion if someone ever tries to
+   // actually default-construct it, or assign to it.
+   // This workaround is required because the code-path that reads values from a data-source always triggers compilation
+   // of `TCustomColumn`s of each type that a node takes in input, even though a data-source is not actually present at
+   // runtime, and even though that type is non-assignable/non-default-constructible.
+   //
+   // The workaround can go away if/when we support data-source columns of non-assignable types (or at least when we
+   // avoid doing those assignments ourselves) and if we decide to drop support of non-default-constructible types.
+   // 
+   // An alternative solution might be delegating calls to `DefineDataSourceColumns` to specialized functions chosen
+   // at TInterface construction time (only when TDataSource is present the specialized function would actually do
+   // something). This way the compiler would try to compile TCustomColumns for all inputs of all nodes only when
+   // a TDataSource is present.
+   using TrueRetType_t = typename CallableTraits<F>::ret_type;
+   using ret_type = typename std::conditional<std::is_copy_assignable<TrueRetType_t>::value &&
+                                                 std::is_default_constructible<TrueRetType_t>::value,
+                                              TrueRetType_t, AbortIfUsed>::type;
    // Avoid instantiating vector<bool> as `operator[]` returns temporaries in that case. Use std::deque instead.
    using ValuesPerSlot_t =
       typename std::conditional<std::is_same<ret_type, bool>::value, std::deque<ret_type>, std::vector<ret_type>>::type;
@@ -403,11 +431,7 @@ public:
                                  fImplPtr->GetBookedColumns(), TypeInd_t());
    }
 
-   void *GetValuePtr(unsigned int slot) final
-   {
-      // could be nicely made a constexpr if instead
-      return GetValuePtrImpl(slot, std::integral_constant<bool, IsDataSourceColumn>());
-   }
+   void *GetValuePtr(unsigned int slot) final { return static_cast<void *>(&fLastResults[slot]); }
 
    void Update(unsigned int slot, Long64_t entry) final
    {
@@ -441,18 +465,6 @@ public:
    }
 
    void ClearValueReaders(unsigned int slot) final { ResetTDFValueTuple(fValues[slot], TypeInd_t()); }
-private:
-   // user-defined custom columns are stored by value, take their address
-   void *GetValuePtrImpl(unsigned int slot, std::false_type /*IsDataSourceColumn*/)
-   {
-      return static_cast<void *>(&fLastResults[slot]);
-   }
-
-   // data-source columns are stored by pointer, just cast it to void*
-   void *GetValuePtrImpl(unsigned int slot, std::true_type /*IsDataSourceColumn*/)
-   {
-      return static_cast<void *>(fLastResults[slot]);
-   }
 };
 
 class TFilterBase {
