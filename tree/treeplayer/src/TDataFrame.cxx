@@ -642,4 +642,6 @@ TDataFrame::TDataFrame(ULong64_t numEntries)
 TDataFrame::TDataFrame(std::unique_ptr<TDataSource> ds, const ColumnNames_t &defaultBranches)
    : TInterface<TDFDetail::TLoopManager>(std::make_shared<TDFDetail::TLoopManager>(std::move(ds), defaultBranches))
 {
+   const auto nSlots = ROOT::GetImplicitMTPoolSize();
+   GetProxiedPtr()->GetDataSource()->SetNSlots( 0U == nSlots ? 1U : nSlots);
 }

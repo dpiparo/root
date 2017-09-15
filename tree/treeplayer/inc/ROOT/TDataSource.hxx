@@ -30,9 +30,9 @@ public:
    virtual std::string GetTypeName(std::string_view) const = 0;
    /// Called at most once per column by TDF. Return vector of pointers to pointers to column values - one per slot.
    template <typename T>
-   std::vector<T **> GetColumnReaders(std::string_view name, unsigned int nSlots)
+   std::vector<T **> GetColumnReaders(std::string_view name)
    {
-      auto typeErasedVec = GetColumnReadersImpl(name, nSlots, typeid(T));
+      auto typeErasedVec = GetColumnReadersImpl(name, typeid(T));
       std::vector<T **> typedVec(typeErasedVec.size());
       std::transform(typeErasedVec.begin(), typeErasedVec.end(), typedVec.begin(),
                      [](void *p) { return static_cast<T **>(p); });
@@ -43,6 +43,9 @@ public:
    virtual const std::vector<std::pair<ULong64_t, ULong64_t>> &GetEntryRanges() const = 0;
    /// Different threads will loop over different ranges and will pass different "slot" values.
    virtual void SetEntry(ULong64_t entry, unsigned int slot) = 0;
+   /// Method to set the number of slots. Some implementations may rely on this
+   /// information for optimisation purposes.
+   virtual void SetNSlots(ULong64_t nSlots) = 0;
    /// Convenience method called at the start of each task, before processing a range of entries.
    /// DataSources can implement it if needed (does nothing by default).
    /// firstEntry is the first entry of the range that the task will process.
@@ -51,7 +54,7 @@ public:
 protected:
    /// type-erased vector of pointers to pointers to column values - one per slot
    virtual std::vector<void *>
-   GetColumnReadersImpl(std::string_view name, unsigned int nSlots, const std::type_info &) = 0;
+   GetColumnReadersImpl(std::string_view name, const std::type_info &) = 0;
 };
 
 } // ns TDF
