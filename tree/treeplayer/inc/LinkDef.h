@@ -122,6 +122,10 @@
 #pragma link C++ class ROOT::Experimental::TDF::TTrivialDS-;
 #pragma link C++ class ROOT::Experimental::TDF::TRootDS-;
 #pragma link C++ class ROOT::Experimental::TDF::TCsvDS-;
+#pragma link C++ class ROOT::Experimental::VecOps::TVec<int>+;
+#pragma link C++ namespace ROOT::Experimental::VecOps;
+#pragma link C++ namespace ROOT::Detail::VecOps;
+#pragma link C++ namespace ROOT::Internal::VecOps;
 
 #endif
 

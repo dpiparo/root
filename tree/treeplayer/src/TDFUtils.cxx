@@ -55,7 +55,12 @@ ColumnName2ColumnTypeName(const std::string &colName, TTree *tree, TCustomColumn
       // this must be a real TTree branch
       static const TClassRef tbranchelRef("TBranchElement");
       if (branch->InheritsFrom(tbranchelRef)) {
-         return static_cast<TBranchElement *>(branch)->GetClassName();
+         std::string name = static_cast<TBranchElement *>(branch)->GetClassName();
+         const std::string repl = "vector<";
+         auto newName = name;
+         newName.replace(name.find(repl),repl.length(),"TVec<");
+         std::cout << "Branch class name was " << name << " now is " << newName << std::endl;
+         return newName;
       } else { // Try the fundamental type
          std::string_view title(branch->GetTitle());
          char typeCode = title.back();
@@ -98,7 +103,11 @@ ColumnName2ColumnTypeName(const std::string &colName, TTree *tree, TCustomColumn
       // this must be a temporary branch
       const auto &type_id = tmpBranch->GetTypeId();
       if (auto c = TClass::GetClass(type_id)) {
-         return c->GetName();
+         std::string name = c->GetName();
+         const std::string repl = "vector<";
+         auto newName = name;
+         newName.replace(name.find(repl),repl.length(),"TVec<");
+         return newName;
       } else if (type_id == typeid(char))
          return "char";
       else if (type_id == typeid(unsigned char))

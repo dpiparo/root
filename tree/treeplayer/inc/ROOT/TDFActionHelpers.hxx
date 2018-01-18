@@ -626,7 +626,7 @@ public:
    template <typename T>
    void SetBranchesHelper(const std::string &name, TArrayBranch<T> *ab)
    {
-      fOutputTree->Branch(name.c_str(), ab->GetData(), fInputTree->GetBranch(name.c_str())->GetTitle());
+      fOutputTree->Branch(name.c_str(), ab->data(), fInputTree->GetBranch(name.c_str())->GetTitle());
    }
 
    void Finalize() { fOutputTree->Write(); }
@@ -724,7 +724,7 @@ public:
    template <typename T>
    void SetBranchesHelper(TTree &outputTree, TTree &inputTree, const std::string &name, TArrayBranch<T> *ab)
    {
-      outputTree.Branch(name.c_str(), ab->GetData(), inputTree.GetBranch(name.c_str())->GetTitle());
+      outputTree.Branch(name.c_str(), ab->data(), inputTree.GetBranch(name.c_str())->GetTitle());
    }
 
    void Finalize()

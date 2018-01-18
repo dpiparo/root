@@ -303,8 +303,9 @@ public:
             fArrayHasBeenChecked = true;
          }
       }
-
-      return TArrayBranch<ProxyParam_t>(readerArray);
+      ROOT::Detail::VecOps::TVecAllocator<ProxyParam_t> alloc((ProxyParam_t*)readerArray.GetAddress(), readerArray.GetSize());
+      return TArrayBranch<ProxyParam_t>(readerArray.GetSize(), ProxyParam_t(), alloc);
+      //return TArrayBranch<ProxyParam_t>(readerArray);
    }
 
    void Reset()
