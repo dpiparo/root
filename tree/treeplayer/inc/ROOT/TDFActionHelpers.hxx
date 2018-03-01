@@ -29,6 +29,7 @@
 #include "ROOT/RStringView.hxx"
 #include "RtypesCore.h"
 #include "TBranch.h"
+#include "TBranchElement.h"
 #include "TClassEdit.h"
 #include "TDirectory.h"
 #include "TFile.h" // for SnapshotHelper
@@ -565,7 +566,8 @@ extern template void MeanHelper::Exec(unsigned int, const std::vector<unsigned i
 /// Helper function for SnapshotHelper and SnapshotHelperMT. It creates new branches for the output TTree of a Snapshot.
 template <typename T>
 void SetBranchesHelper(TTree * /*inputTree*/, TTree &outputTree, const std::string & /*validName*/,
-                       const std::string &name, T *address)
+                       const std::string &name, T *address, std::vector<int> & /*vecSizes*/,
+                       std::vector<void *> & /*vecAddresses*/)
 {
    outputTree.Branch(name.c_str(), address);
 }
@@ -576,15 +578,35 @@ void SetBranchesHelper(TTree * /*inputTree*/, TTree &outputTree, const std::stri
 /// 2. TVecs coming from a custom column or a source
 template <typename T>
 void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &validName, const std::string &name,
-                       TVec<T> *ab)
+                       TVec<T> *ab, std::vector<int> &vecSizes, std::vector<void *> &vecAddresses)
 {
    // Check if this TVec is coming from a custom column or a source
    auto *const inputBranch = inputTree ? inputTree->GetBranch(validName.c_str()) : nullptr;
    if (!inputBranch) {
-      outputTree.Branch(name.c_str(), ab);
+      // TODO write as c-array
       return;
    }
 
+   // this must be a real TTree branch
+   // check if it comes from a vector on disk
+   static const TClassRef tbranchelRef("TBranchElement");
+   if (inputBranch->InheritsFrom(tbranchelRef)) {
+      std::string classname(static_cast<TBranchElement *>(inputBranch)->GetClassName());
+      if (ROOT::ESTLType::kSTLvector == TClassEdit::IsSTLCont(classname)) {
+         // write as c-array
+         auto outputBranch = outputTree.Branch(name.c_str(), ab->data());
+         outputBranch->SetTitle(inputBranch->GetTitle());
+         auto sizeBranchName = "__tdf_" + name + "_size";
+         const auto idx =
+            std::distance(vecAddresses.begin(), std::find(vecAddresses.begin(), vecAddresses.end(), ab));
+         auto &vecSize = vecSizes[idx];
+         outputTree.Branch(sizeBranchName.c_str(), &vecSize);
+      }
+   }
+
+   // otherwise this must be a c-array read from a ROOT file
+   // for variable sized arrays, we assume that the size if being written separately, as it must have been present
+   // in the input file
    auto *const leaf = static_cast<TLeaf *>(inputBranch->GetListOfLeaves()->UncheckedAt(0));
    const auto bname = leaf->GetName();
    const auto counterStr =
@@ -596,6 +618,26 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &v
    outputBranch->SetTitle(inputBranch->GetTitle());
 }
 
+template <typename ColType>
+void UpdateSize(ColType&, std::vector<int> &, const std::vector<void *>) {}
+
+template <typename ElemType>
+void UpdateSize(TVec<ElemType> &v, std::vector<int> &sizes, const std::vector<void *> &addresses)
+{
+   const auto idx = std::distance(addresses.begin(), std::find(addresses.begin(), addresses.end(), &v));
+   sizes[idx] = v.size();
+}
+
+template <typename ColType>
+void CreateSizeVectors(ColType &, std::vector<int> &, const std::vector<void *> &) {}
+
+template <typename ElemType>
+void CreteSizeVectors(TVec<ElemType> &v, std::vector<int> &sizes, const std::vector<void *> &addresses)
+{
+   addresses.emplace_back(&v);
+   sizes.emplace_back(v.size());
+}
+
 /// Helper object for a single-thread Snapshot action
 template <typename... BranchTypes>
 class SnapshotHelper {
@@ -605,6 +647,10 @@ class SnapshotHelper {
    const ColumnNames_t fValidBranchNames; // This contains the resolved aliases
    const ColumnNames_t fBranchNames;
    TTree *fInputTree = nullptr; // Current input tree. Set at initialization time (`InitSlot`)
+   // Addresses of TVecs that we are snapshotting. Positions correspond to the ones in fVecAddresses.
+   std::vector<void *> fVecAddresses;
+   // Sizes of TVecs that we are snapshotting. Must be int because ROOT expects ints as array sizes
+   std::vector<int> fVecSizes;
 
 public:
    SnapshotHelper(std::string_view filename, std::string_view dirname, std::string_view treename,
@@ -642,9 +688,16 @@ public:
    void Exec(unsigned int /* slot */, BranchTypes&... values)
    {
       if (fIsFirstEvent) {
+         int expander[] = {(CreateSizeVectors(values, fVecSizes, fVecAddresses), 0)..., 0};
+         (void)expander;
          using ind_t = GenStaticSeq_t<sizeof...(BranchTypes)>;
          SetBranches(values..., ind_t());
       }
+
+      // update the sizes of each of the TVecs we are snapshotting
+      int expander[] = { (UpdateSize(values, fVecSizes, fVecAddresses), 0)..., 0};
+      (void)expander;
+
       fOutputTree->Fill();
    }
 
@@ -652,8 +705,10 @@ public:
    void SetBranches(BranchTypes&... values, StaticSeq<S...> /*dummy*/)
    {
       // hack to call TTree::Branch on all variadic template arguments
-      int expander[] = {
-         (SetBranchesHelper(fInputTree, *fOutputTree, fValidBranchNames[S], fBranchNames[S], &values), 0)..., 0};
+      int expander[] = {(SetBranchesHelper(fInputTree, *fOutputTree, fValidBranchNames[S], fBranchNames[S], &values,
+                                           fVecSizes, fVecAddresses),
+                         0)...,
+                        0};
       (void)expander; // avoid unused variable warnings for older compilers such as gcc 4.9
       fIsFirstEvent = false;
    }
@@ -675,6 +730,10 @@ class SnapshotHelperMT {
    const ColumnNames_t fValidBranchNames; // This contains the resolved aliases
    const ColumnNames_t fBranchNames;
    std::vector<TTree *> fInputTrees; // Current input trees. Set at initialization time (`InitSlot`)
+   // Addresses of TVecs that we are snapshotting. Positions correspond to the ones in fVecAddresses.
+   std::vector<std::vector<void *>> fVecAddresses;
+   // Sizes of TVecs that we are snapshotting. Must be int because ROOT expects ints as array sizes
+   std::vector<std::vector<int>> fVecSizes;
 
 public:
    using BranchTypes_t = TypeList<BranchTypes...>;
@@ -739,10 +798,10 @@ public:
    void SetBranches(unsigned int slot, BranchTypes&... values, StaticSeq<S...> /*dummy*/)
    {
       // hack to call TTree::Branch on all variadic template arguments
-      int expander[] = {
-         (SetBranchesHelper(fInputTrees[slot], *fOutputTrees[slot], fValidBranchNames[S], fBranchNames[S], &values),
-          0)...,
-         0};
+      int expander[] = {(SetBranchesHelper(fInputTrees[slot], *fOutputTrees[slot], fValidBranchNames[S],
+                                           fBranchNames[S], &values, fVecSizes[slot], fVecAddresses[slot]),
+                         0)...,
+                        0};
       (void)expander; // avoid unused variable warnings for older compilers such as gcc 4.9
    }
 
