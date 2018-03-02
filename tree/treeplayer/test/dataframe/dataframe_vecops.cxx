@@ -1,3 +1,4 @@
+// Test integration of TDataFrame and VecOps
 #include <ROOT/TDataFrame.hxx>
 #include <ROOT/TVec.hxx>
 #include <TBranchElement.h>
@@ -58,15 +59,10 @@ TEST(TDFAndVecOps, SnapshotTVec)
    const auto treename = "t";
    const auto nEntries = 5u;
    auto makeTVec = []() { return TVec<int>({1, 2, 3}); };
-   TDataFrame(nEntries).Define("v", makeTVec).Snapshot<TVec<int>>(treename, fname, {"v"});
+   auto tdf = TDataFrame(nEntries).Define("v", makeTVec).Snapshot<TVec<int>>(treename, fname, {"v"});
 
-   // check the TVec was written as a std::vector
-   TFile f(fname);
-   auto t = static_cast<TTree *>(f.Get(treename));
-   auto b = static_cast<TBranchElement *>(t->GetBranch("v"));
-   ASSERT_TRUE(b != nullptr);
-   auto branchTypeName = b->GetClassName();
-   EXPECT_EQ(branchTypeName, "vector<int>");
+   // check the TVec was written correctly
+   tdf.Foreach([](const TVec<int> &v) { EXPECT_TRUE(All(v == TVec<int>({1, 2, 3}))); }, {"v"});
 
    gSystem->Unlink(fname);
 }
