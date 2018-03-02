@@ -273,6 +273,13 @@ public:
 
    void MakeProxy(TTreeReader *r, const std::string &bn)
    {
+      auto t = r.GetTree();
+      auto b = t->GetBranch(bn);
+      static const TClassRef tbranchelRef("TBranchElement");
+      if (b->InheritsFrom(tbranchelRef)) {
+      std::string classname(static_cast<TBranchElement *>(inputBranch)->GetClassName());
+      if (ROOT::ESTLType::kSTLvector == TClassEdit::IsSTLCont(classname)) {
+
       fColumnKind = EColumnKind::kTree;
       fTreeReaders.emplace_back(new TreeReader_t(*r, bn.c_str()));
    }

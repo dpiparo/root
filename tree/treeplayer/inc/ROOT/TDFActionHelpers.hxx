@@ -574,66 +574,71 @@ void SetBranchesHelper(TTree * /*inputTree*/, TTree &outputTree, const std::stri
 
 /// Helper function for SnapshotHelper and SnapshotHelperMT. It creates new branches for the output TTree of a Snapshot.
 /// This overload is called for columns of type `TVec<T>`. For TDF, these can represent:
-/// 1. c-style arrays in ROOT files, so we are sure that there are input trees to which we can ask the correct branch title
-/// 2. TVecs coming from a custom column or a source
+/// 1. Define'd TVecs
+/// 2. std::vectors in ROOT files
+/// 3. c-style arrays in ROOT files
+// FIXME revisit as soon as ROOT supports reading of collections with custom allocators:
+// we could always write out TVecs as TVecs (or as std::vectors) and avoid all of this logic
 template <typename T>
 void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &validName, const std::string &name,
                        TVec<T> *ab, std::vector<int> &vecSizes, std::vector<void *> &vecAddresses)
 {
-   // Check if this TVec is coming from a custom column or a source
    auto *const inputBranch = inputTree ? inputTree->GetBranch(validName.c_str()) : nullptr;
-   if (!inputBranch) {
-      // TODO write as c-array
-      return;
-   }
-
-   // this must be a real TTree branch
-   // check if it comes from a vector on disk
+   const auto isDefinedColumn = (inputBranch == nullptr);
    static const TClassRef tbranchelRef("TBranchElement");
-   if (inputBranch->InheritsFrom(tbranchelRef)) {
-      std::string classname(static_cast<TBranchElement *>(inputBranch)->GetClassName());
-      if (ROOT::ESTLType::kSTLvector == TClassEdit::IsSTLCont(classname)) {
-         // write as c-array
-         auto outputBranch = outputTree.Branch(name.c_str(), ab->data());
-         outputBranch->SetTitle(inputBranch->GetTitle());
-         auto sizeBranchName = "__tdf_" + name + "_size";
-         const auto idx =
-            std::distance(vecAddresses.begin(), std::find(vecAddresses.begin(), vecAddresses.end(), ab));
-         auto &vecSize = vecSizes[idx];
-         outputTree.Branch(sizeBranchName.c_str(), &vecSize);
-      }
+   const auto isStdVector = isDefinedColumn ? false : inputBranch->InheritsFrom(tbranchelRef);
+
+   std::string outBranchName;
+   std::string leaflist;
+
+   if (isDefinedColumn || isStdVector) {
+      outBranchName = name;
+      auto sizeBranchName = "__tdf_" + outBranchName + "_size";
+      leaflist = outBranchName + "[" + sizeBranchName + "]/" + TypeName2ROOTTypeName(TypeID2TypeName(typeid(T)));
+
+      // create a branch for the size of the TVec and one for its data
+      const auto idx = std::distance(vecAddresses.begin(), std::find(vecAddresses.begin(), vecAddresses.end(), ab));
+      auto &vecSize = vecSizes[idx];
+      outputTree.Branch(sizeBranchName.c_str(), &vecSize);
+   } else {
+      // this is a c-array read as a TVec, recover the original name and title
+      auto *const leaf = static_cast<TLeaf *>(inputBranch->GetListOfLeaves()->UncheckedAt(0));
+      outBranchName = leaf->GetName();
+
+      const auto counterStr =
+         leaf->GetLeafCount() ? std::string(leaf->GetLeafCount()->GetName()) : std::to_string(leaf->GetLenStatic());
+      const auto btype = leaf->GetTypeName();
+      const auto rootbtype = TypeName2ROOTTypeName(btype);
+      leaflist = outBranchName + "[" + counterStr + "]/" + rootbtype;
    }
 
-   // otherwise this must be a c-array read from a ROOT file
-   // for variable sized arrays, we assume that the size if being written separately, as it must have been present
-   // in the input file
-   auto *const leaf = static_cast<TLeaf *>(inputBranch->GetListOfLeaves()->UncheckedAt(0));
-   const auto bname = leaf->GetName();
-   const auto counterStr =
-      leaf->GetLeafCount() ? std::string(leaf->GetLeafCount()->GetName()) : std::to_string(leaf->GetLenStatic());
-   const auto btype = leaf->GetTypeName();
-   const auto rootbtype = TypeName2ROOTTypeName(btype);
-   const auto leaflist = std::string(bname) + "[" + counterStr + "]/" + rootbtype;
-   auto *const outputBranch = outputTree.Branch(name.c_str(), ab->data(), leaflist.c_str());
-   outputBranch->SetTitle(inputBranch->GetTitle());
+   auto outBranch = outputTree.Branch(outBranchName.c_str(), ab->data(), leaflist.c_str());
+   if (!isDefinedColumn && !isStdVector)
+      outBranch->SetTitle(inputBranch->GetTitle());
 }
 
+/// Update sizes and addresses of the TVecs we are writing out
+/// This is required because the TVecs data segment might completely change at each entry
+// FIXME remove as soon as ROOT supports reading of collections with custom allocators
 template <typename ColType>
-void UpdateSize(ColType&, std::vector<int> &, const std::vector<void *>) {}
+void UpdateTVecOutputs(ColType &, std::vector<int> &, const std::vector<void *> &) {}
 
 template <typename ElemType>
-void UpdateSize(TVec<ElemType> &v, std::vector<int> &sizes, const std::vector<void *> &addresses)
+void UpdateTVecOutputs(TVec<ElemType> &v, std::vector<int> &sizes, const std::vector<void *> &addresses)
 {
    const auto idx = std::distance(addresses.begin(), std::find(addresses.begin(), addresses.end(), &v));
    sizes[idx] = v.size();
 }
 
+// FIXME remove as soon as ROOT supports reading of collections with custom allocators
 template <typename ColType>
-void CreateSizeVectors(ColType &, std::vector<int> &, const std::vector<void *> &) {}
+void InitTVecProperties(ColType &, std::vector<int> &, std::vector<void *> &) {}
 
 template <typename ElemType>
-void CreteSizeVectors(TVec<ElemType> &v, std::vector<int> &sizes, const std::vector<void *> &addresses)
+void InitTVecProperties(TVec<ElemType> &v, std::vector<int> &sizes, std::vector<void *> &addresses)
 {
+   // FIXME we are adding more elements to these vectors than needed:
+   // we actually only need to keep track of the sizes of the TVecs that correspond to a std::vector on disk 
    addresses.emplace_back(&v);
    sizes.emplace_back(v.size());
 }
@@ -688,29 +693,28 @@ public:
    void Exec(unsigned int /* slot */, BranchTypes&... values)
    {
       if (fIsFirstEvent) {
-         int expander[] = {(CreateSizeVectors(values, fVecSizes, fVecAddresses), 0)..., 0};
+         int expander[] = {(InitTVecProperties(values, fVecSizes, fVecAddresses), 0)..., 0};
          (void)expander;
          using ind_t = GenStaticSeq_t<sizeof...(BranchTypes)>;
          SetBranches(values..., ind_t());
+         fIsFirstEvent = false;
       }
 
-      // update the sizes of each of the TVecs we are snapshotting
-      int expander[] = { (UpdateSize(values, fVecSizes, fVecAddresses), 0)..., 0};
+      int expander[] = { (UpdateTVecOutputs(values, fVecSizes, fVecAddresses), 0)..., 0};
       (void)expander;
 
       fOutputTree->Fill();
    }
 
+   /// Create output branches for all the selected input variables
    template <int... S>
    void SetBranches(BranchTypes&... values, StaticSeq<S...> /*dummy*/)
    {
-      // hack to call TTree::Branch on all variadic template arguments
       int expander[] = {(SetBranchesHelper(fInputTree, *fOutputTree, fValidBranchNames[S], fBranchNames[S], &values,
                                            fVecSizes, fVecAddresses),
                          0)...,
                         0};
       (void)expander; // avoid unused variable warnings for older compilers such as gcc 4.9
-      fIsFirstEvent = false;
    }
 
    void Finalize() { fOutputTree->Write(); }
@@ -744,7 +748,8 @@ public:
                             std::string(filename).c_str(), options.fMode.c_str(),
                             ROOT::CompressionSettings(options.fCompressionAlgorithm, options.fCompressionLevel))),
         fOutputFiles(fNSlots), fOutputTrees(fNSlots, nullptr), fIsFirstEvent(fNSlots, 1), fDirName(dirname),
-        fTreeName(treename), fOptions(options), fValidBranchNames(vbnames), fBranchNames(bnames), fInputTrees(fNSlots)
+        fTreeName(treename), fOptions(options), fValidBranchNames(vbnames), fBranchNames(bnames), fInputTrees(fNSlots),
+        fVecAddresses(fNSlots), fVecSizes(fNSlots)
    {
    }
    SnapshotHelperMT(const SnapshotHelperMT &) = delete;
@@ -783,10 +788,16 @@ public:
    void Exec(unsigned int slot, BranchTypes&... values)
    {
       if (fIsFirstEvent[slot]) {
+         int expander[] = {(InitTVecProperties(values, fVecSizes[slot], fVecAddresses[slot]), 0)..., 0};
+         (void)expander;
          using ind_t = GenStaticSeq_t<sizeof...(BranchTypes)>;
          SetBranches(slot, values..., ind_t());
          fIsFirstEvent[slot] = 0;
       }
+
+      int expander[] = { (UpdateTVecOutputs(values, fVecSizes[slot], fVecAddresses[slot]), 0)..., 0};
+      (void)expander;
+
       fOutputTrees[slot]->Fill();
       auto entries = fOutputTrees[slot]->GetEntries();
       auto autoFlush = fOutputTrees[slot]->GetAutoFlush();
@@ -794,10 +805,10 @@ public:
          fOutputFiles[slot]->Write();
    }
 
+   /// Create output branches for all the selected input variables in this processing slot
    template <int... S>
    void SetBranches(unsigned int slot, BranchTypes&... values, StaticSeq<S...> /*dummy*/)
    {
-      // hack to call TTree::Branch on all variadic template arguments
       int expander[] = {(SetBranchesHelper(fInputTrees[slot], *fOutputTrees[slot], fValidBranchNames[S],
                                            fBranchNames[S], &values, fVecSizes[slot], fVecAddresses[slot]),
                          0)...,
