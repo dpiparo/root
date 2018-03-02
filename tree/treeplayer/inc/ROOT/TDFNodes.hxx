@@ -18,6 +18,9 @@
 #include "ROOT/TDFUtils.hxx"
 #include "ROOT/TVec.hxx"
 #include "ROOT/TSpinMutex.hxx"
+#include "TBranchElement.h"
+#include "TClassEdit.h"
+#include "TTreeReader.h"
 #include "TTreeReaderArray.h"
 #include "TTreeReaderValue.h"
 #include "TError.h"
@@ -264,6 +267,30 @@ class TColumnValue {
    /// If MustUseReaderArray, i.e. we are reading an array, we return a reference to this TVec to clients
    TVec<ColumnValue_t> fTVec;
 
+   /// If fgMustUseReaderArray == true, make sure the branch corresponds to a c-array or a std::vector
+   template <typename U = T, typename std::enable_if<TColumnValue<U>::fgMustUseReaderArray, int>::type = 0>
+   void CheckIfStdVectorOrCArray(TTree &t, const std::string &colName)
+   {
+      bool isStdArray = false;
+      bool isCArray = false;
+      auto b = t.GetBranch(colName.c_str());
+      static const TClassRef tbranchelRef("TBranchElement");
+      if (b->InheritsFrom(tbranchelRef)) {
+         std::string classname(static_cast<TBranchElement *>(b)->GetClassName());
+         if (ROOT::ESTLType::kSTLvector == TClassEdit::IsSTLCont(classname))
+            isStdArray = true;
+      } else {
+         // TODO actually check if c-array
+         isCArray = true;
+      }
+      if (!isStdArray && !isCArray)
+         throw std::runtime_error("Trying to read column " + colName +
+                                  " as a TVec, but TTree branch is not an array or a std::vector");
+   }
+
+   template <typename U = T, typename std::enable_if<!TColumnValue<U>::fgMustUseReaderArray, int>::type = 0>
+   void CheckIfStdVectorOrCArray(TTree &, const std::string &) {}
+
 public:
    static constexpr bool fgMustUseReaderArray = MustUseReaderArray;
 
@@ -273,6 +300,8 @@ public:
 
    void MakeProxy(TTreeReader *r, const std::string &bn)
    {
+      CheckIfStdVectorOrCArray(*r->GetTree(), bn);
+
       fColumnKind = EColumnKind::kTree;
       fTreeReaders.emplace_back(new TreeReader_t(*r, bn.c_str()));
    }
