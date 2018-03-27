@@ -1,13 +1,14 @@
 #ifndef ROOT_TARROWTDS
 #define ROOT_TARROWTDS
 
+#include "ROOT/TDataFrame.hxx"
+#include "ROOT/TDataSource.hxx"
+
 #pragma GCC diagnostic ignored "-Wshadow"
 #include <arrow/table.h>
 #pragma GCC diagnostic pop
-#include <memory>
 
-#include "ROOT/TDataFrame.hxx"
-#include "ROOT/TDataSource.hxx"
+#include <memory>
 
 namespace ROOT {
 namespace Experimental {
