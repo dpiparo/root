@@ -31,21 +31,22 @@ TEST(Cache, FundType)
    }
 }
 
-TEST(Cache, Contiguity)
-{
-   TDataFrame tdf(2);
-   auto f = 0.f;
-   auto cached = tdf.Define("float", [&f]() { return f++; }).Cache<float>({"float"});
-   int counter = 0;
-   float *fPrec = nullptr;
-   auto count = [&counter, &fPrec](float &ff) {
-      if (1 == counter++) {
-         EXPECT_EQ(1, std::distance(fPrec, &ff));
-      }
-      fPrec = &ff;
-   };
-   cached.Foreach(count, {"float"});
-}
+// After the cache has been made lazy and managed through the TLazyDS, the memory is not contiguous any more.
+// TEST(Cache, Contiguity)
+// {
+//    TDataFrame tdf(2);
+//    auto f = 0.f;
+//    auto cached = tdf.Define("float", [&f]() { return f++; }).Cache<float>({"float"});
+//    int counter = 0;
+//    float *fPrec = nullptr;
+//    auto count = [&counter, &fPrec](float &ff) {
+//       if (1 == counter++) {
+//          EXPECT_EQ(1, std::distance(fPrec, &ff));
+//       }
+//       fPrec = &ff;
+//    };
+//    cached.Foreach(count, {"float"});
+// }
 
 TEST(Cache, Class)
 {
@@ -68,6 +69,7 @@ TEST(Cache, Class)
 
 TEST(Cache, RunTwiceOnCached)
 {
+   // This test also tests laziness
    auto nevts = 10U;
    TDataFrame tdf(nevts);
    auto f = 0.f;
@@ -78,11 +80,14 @@ TEST(Cache, RunTwiceOnCached)
    });
 
    auto cached = orig.Cache<float>({"float"});
-   EXPECT_EQ(nevts, nCalls);
+   EXPECT_EQ(0U, nCalls);
    auto m0 = cached.Mean<float>("float");
-   EXPECT_EQ(nevts, nCalls);
+   EXPECT_EQ(0U, nCalls);
+   *m0;
    cached.Foreach([]() {});               // run the event loop
    auto m1 = cached.Mean<float>("float"); // re-run the event loop
+   EXPECT_EQ(10U, nCalls);
+   *m1;
    EXPECT_EQ(nevts, nCalls);
    EXPECT_EQ(*m0, *m1);
 }

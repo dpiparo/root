@@ -27,6 +27,7 @@
 #include "ROOT/RIntegerSequence.hxx"
 #include "ROOT/RStringView.hxx"
 #include "ROOT/TCutFlowReport.hxx"
+#include "ROOT/TDataFrame.hxx"
 #include "ROOT/TDFActionHelpers.hxx"
 #include "ROOT/TDFHistoModels.hxx"
 #include "ROOT/TDFInterfaceUtils.hxx"
@@ -34,6 +35,7 @@
 #include "ROOT/TDFNodesUtils.hxx"
 #include "ROOT/TDFUtils.hxx"
 #include "ROOT/TDataSource.hxx"
+#include "ROOT/TLazyDS.hxx"
 #include "ROOT/TResultPtr.hxx"
 #include "ROOT/TSnapshotOptions.hxx"
 #include "ROOT/TypeTraits.hxx"
@@ -1461,7 +1463,7 @@ private:
       if (fDataSource) {
          auto &dsColNames = fDataSource->GetColumnNames();
          for (auto &dsColName : dsColNames) {
-            if (isEmptyRegex || -1 != regexp.Index(dsColName, &dummy)) {
+            if ((isEmptyRegex || -1 != regexp.Index(dsColName, &dummy)) && !TDFInternal::IsInternalColumn(dsColName)) {
                selectedColumns.emplace_back(dsColName);
             }
          }
@@ -1674,41 +1676,19 @@ private:
          auto lm = GetDataFrameChecked();
          TDFInternal::DefineDataSourceColumns(columnList, *lm, s, TTraits::TypeList<BranchTypes...>(), *fDataSource);
       }
-      std::tuple<
-         TDFInternal::CacheColumnHolder<typename TDFDetail::TTakeRealTypes<BranchTypes>::RealColl_t::value_type>...>
-         colHolders;
 
-      // TODO: really fix the type of the Take....
-      std::initializer_list<int> expander0{(
-         // This gets expanded
-         std::get<S>(colHolders).fContent = std::move(
-            Take<typename std::decay<decltype(std::get<S>(colHolders))>::type::value_type>(columnList[S]).GetValue()),
-         0)...};
-      (void)expander0;
+      auto colHolders = std::make_tuple(Take<BranchTypes>(columnList[S])...);
 
-      auto nEntries = std::get<0>(colHolders).fContent.size();
-
-      TInterface<TLoopManager> cachedTDF(std::make_shared<TLoopManager>(nEntries));
-      const ColumnNames_t noCols = {};
+      TInterface<TDFDetail::TLoopManager> cachedTDF(std::make_unique<TLazyDS<BranchTypes...>>(std::make_pair(columnList[S], std::get<S>(colHolders))...));
+//       auto cachedTDF =
+//       MakeLazyDataFrame<TDataFrame>(std::make_pair(columnList[S], std::get<S>(colHolders))...);
 
       // Define custom columns for the output TDF -- these columns behave like TDataSource columns w.r.t. their return
       // value, e.g. the expression returns a pointer rather than a value and TCustomColumn dereferences it for us
       auto lm = cachedTDF.GetDataFrameChecked();
-      std::initializer_list<int> expander1{(
-         // This gets expanded
-         lm->Book(
-            std::make_shared<TDFDetail::TCustomColumn<typename std::decay<decltype(std::get<S>(colHolders))>::type,
-                                                      TDFDetail::TCCHelperTypes::TSlotAndEntry>>(
-               columnList[S], std::move(std::get<S>(colHolders)), noCols, lm.get(), /*isDSColumn=*/true)),
-         0)...};
-      (void)expander1;
-
-      // Add names and type aliases of the custom columns to the output TDF
-      auto &vc = cachedTDF.fValidCustomColumns;
-      vc.insert(vc.end(), columnList.begin(), columnList.end());
 
       const std::vector<std::string> columnTypeNames = {TDFInternal::TypeID2TypeName(
-         typeid(typename std::decay<decltype(std::get<S>(colHolders))>::type::value_type))...}; // ... expands on S
+         typeid(typename std::decay<decltype(std::get<S>(colHolders))>::type::Value_t))...}; // ... expands on S
 
       const auto nsID = lm->GetID();
       std::stringstream aliasInvocation;
