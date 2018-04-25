@@ -125,31 +125,6 @@ TActionBase *BuildAndBook(const ColumnNames_t &bl, const std::shared_ptr<ActionR
    return action.get();
 }
 
-// Histo1D filling (must handle the special case of distinguishing FillTOHelper and FillHelper
-template <typename... BranchTypes, typename PrevNodeType>
-TActionBase *BuildAndBook(const ColumnNames_t &bl, const std::shared_ptr<::TH1D> &h, const unsigned int nSlots,
-                          TLoopManager &loopManager, PrevNodeType &prevNode, ActionTypes::Histo1D *)
-{
-   auto hasAxisLimits = HistoUtils<::TH1D>::HasAxisLimits(*h);
-
-   TActionBase *actionBase;
-   if (hasAxisLimits) {
-      using Helper_t = FillTOHelper<::TH1D>;
-      using Action_t = TAction<Helper_t, PrevNodeType, TTraits::TypeList<BranchTypes...>>;
-      auto action = std::make_shared<Action_t>(Helper_t(h, nSlots), bl, prevNode);
-      loopManager.Book(action);
-      actionBase = action.get();
-   } else {
-      using Helper_t = FillHelper;
-      using Action_t = TAction<Helper_t, PrevNodeType, TTraits::TypeList<BranchTypes...>>;
-      auto action = std::make_shared<Action_t>(Helper_t(h, nSlots), bl, prevNode);
-      loopManager.Book(action);
-      actionBase = action.get();
-   }
-
-   return actionBase;
-}
-
 // Min action
 template <typename BranchType, typename PrevNodeType, typename ActionResultType>
 TActionBase *

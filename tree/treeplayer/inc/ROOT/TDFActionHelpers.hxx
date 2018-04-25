@@ -120,77 +120,6 @@ public:
    }
 };
 
-class FillHelper {
-   // this sets a total initial size of 16 MB for the buffers (can increase)
-   static constexpr unsigned int fgTotalBufSize = 2097152;
-   using BufEl_t = double;
-   using Buf_t = std::vector<BufEl_t>;
-
-   std::vector<Buf_t> fBuffers;
-   std::vector<Buf_t> fWBuffers;
-   const std::shared_ptr<Hist_t> fResultHist;
-   unsigned int fNSlots;
-   unsigned int fBufSize;
-   /// Histograms containing "snapshots" of partial results. Non-null only if a registered callback requires it.
-   std::vector<std::unique_ptr<Hist_t>> fPartialHists;
-   Buf_t fMin;
-   Buf_t fMax;
-
-   void UpdateMinMax(unsigned int slot, double v);
-
-public:
-   FillHelper(const std::shared_ptr<Hist_t> &h, const unsigned int nSlots);
-   FillHelper(FillHelper &&) = default;
-   FillHelper(const FillHelper &) = delete;
-   void InitSlot(TTreeReader *, unsigned int) {}
-   void Exec(unsigned int slot, double v);
-   void Exec(unsigned int slot, double v, double w);
-
-   template <typename T, typename std::enable_if<IsContainer<T>::value, int>::type = 0>
-   void Exec(unsigned int slot, const T &vs)
-   {
-      auto &thisBuf = fBuffers[slot];
-      for (auto &v : vs) {
-         UpdateMinMax(slot, v);
-         thisBuf.emplace_back(v); // TODO: Can be optimised in case T == BufEl_t
-      }
-   }
-
-   template <typename T, typename W,
-             typename std::enable_if<IsContainer<T>::value && IsContainer<W>::value, int>::type = 0>
-   void Exec(unsigned int slot, const T &vs, const W &ws)
-   {
-      auto &thisBuf = fBuffers[slot];
-      for (auto &v : vs) {
-         UpdateMinMax(slot, v);
-         thisBuf.emplace_back(v); // TODO: Can be optimised in case T == BufEl_t
-      }
-
-      auto &thisWBuf = fWBuffers[slot];
-      for (auto &w : ws) {
-         thisWBuf.emplace_back(w); // TODO: Can be optimised in case T == BufEl_t
-      }
-   }
-
-   Hist_t &PartialUpdate(unsigned int);
-
-   void Initialize() { /* noop */}
-
-   void Finalize();
-};
-
-extern template void FillHelper::Exec(unsigned int, const std::vector<float> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<double> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<char> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<int> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<unsigned int> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<float> &, const std::vector<float> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<double> &, const std::vector<double> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<char> &, const std::vector<char> &);
-extern template void FillHelper::Exec(unsigned int, const std::vector<int> &, const std::vector<int> &);
-extern template void
-FillHelper::Exec(unsigned int, const std::vector<unsigned int> &, const std::vector<unsigned int> &);
-
 template <typename HIST = Hist_t>
 class FillTOHelper {
    std::unique_ptr<TThreadedObject<HIST>> fTo;
@@ -203,8 +132,9 @@ public:
    {
       fTo->SetAtSlot(0, h);
       // Initialise all other slots
-      for (unsigned int i = 0; i < nSlots; ++i) {
+      for (unsigned int i = 1; i < nSlots; ++i) {
          fTo->GetAtSlot(i);
+         std::cout << "The bit " << fTo->GetAtSlot(i)->TestBit(TH1::kAutoBinPTwo) << std::endl;
       }
    }
 
@@ -212,6 +142,10 @@ public:
 
    void Exec(unsigned int slot, double x0) // 1D histos
    {
+      {
+         R__LOCKGUARD2(gROOTMutex);
+         std::cout << "Filling slot " << slot << " with " << x0 << std::endl;
+      }
       fTo->GetAtSlotRaw(slot)->Fill(x0);
    }
 
@@ -294,7 +228,13 @@ public:
 
    void Initialize() { /* noop */}
 
-   void Finalize() { fTo->Merge(); }
+   void Finalize() {
+      for (unsigned int i = 0; i < 2; ++i) {
+         fTo->GetAtSlot(i);
+         std::cout << "The bit " << fTo->GetAtSlot(i)->TestBit(TH1::kAutoBinPTwo) << std::endl;
+      }
+      fTo->Merge();
+   }
 
    HIST &PartialUpdate(unsigned int slot) { return *fTo->GetAtSlotRaw(slot); }
 };

@@ -742,25 +742,24 @@ public:
    /// booked but not executed. See TResultPtr documentation.
    /// The user gives up ownership of the model histogram.
    template <typename V = TDFDetail::TInferType>
-   TResultPtr<::TH1D> Histo1D(const TH1DModel &model = {"", "", 128u, 0., 0.}, std::string_view vName = "")
+   TResultPtr<::TH1D> Histo1D(const TH1DModel &model = {"", "", 128u, 1., -1.}, std::string_view vName = "")
    {
       const auto userColumns = vName.empty() ? ColumnNames_t() : ColumnNames_t({std::string(vName)});
       std::shared_ptr<::TH1D> h(nullptr);
       {
          ROOT::Internal::TDF::TIgnoreErrorLevelRAII iel(kError);
          h = model.GetHistogram();
-         h->SetDirectory(nullptr);
+         if (model.fXLow > model.fXUp) {
+            h->SetBit(TH1::kAutoBinPTwo);
+         }
       }
-
-      if (h->GetXaxis()->GetXmax() == h->GetXaxis()->GetXmin())
-         TDFInternal::HistoUtils<::TH1D>::SetCanExtendAllAxes(*h);
       return CreateAction<TDFInternal::ActionTypes::Histo1D, V>(userColumns, h);
    }
 
    template <typename V = TDFDetail::TInferType>
    TResultPtr<::TH1D> Histo1D(std::string_view vName)
    {
-      return Histo1D<V>({"", "", 128u, 0., 0.}, vName);
+      return Histo1D<V>({"", "", 128u, 1., -1.}, vName);
    }
 
    ////////////////////////////////////////////////////////////////////////////
@@ -783,6 +782,9 @@ public:
       {
          ROOT::Internal::TDF::TIgnoreErrorLevelRAII iel(kError);
          h = model.GetHistogram();
+         if (model.fXLow > model.fXUp) {
+            h->SetBit(TH1::kAutoBinPTwo);
+         }
       }
       return CreateAction<TDFInternal::ActionTypes::Histo1D, V, W>(userColumns, h);
    }
@@ -799,7 +801,7 @@ public:
    template <typename V = TDFDetail::TInferType, typename W = TDFDetail::TInferType>
    TResultPtr<::TH1D> Histo1D(std::string_view vName, std::string_view wName)
    {
-      return Histo1D<V, W>({"", "", 128u, 0., 0.}, vName, wName);
+      return Histo1D<V, W>({"", "", 128u, 1., -1.}, vName, wName);
    }
 
    ////////////////////////////////////////////////////////////////////////////
@@ -811,7 +813,7 @@ public:
    /// This overload will use the first two default columns as column names.
    /// See the description of the first Histo1D overload for more details.
    template <typename V, typename W>
-   TResultPtr<::TH1D> Histo1D(const TH1DModel &model = {"", "", 128u, 0., 0.})
+   TResultPtr<::TH1D> Histo1D(const TH1DModel &model = {"", "", 128u, 1., -1.})
    {
       return Histo1D<V, W>(model, "", "");
    }
