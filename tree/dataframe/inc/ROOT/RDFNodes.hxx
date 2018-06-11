@@ -860,20 +860,30 @@ T &TColumnValue<T, B>::Get(Long64_t entry)
 {
    if (fColumnKind == EColumnKind::kTree) {
       auto &readerArray = *fTreeReaders.back();
+      const auto readerArraySize = readerArray.GetSize();
       // We only use TTreeReaderArrays to read columns that users flagged as type `RVec`, so we need to check
       // that the branch stores the array as contiguous memory that we can actually wrap in an `RVec`.
       // Currently we need the first entry to have been loaded to perform the check
       // TODO Move check to `MakeProxy` once Axel implements this kind of check in TTreeReaderArray using
       // TBranchProxy
 
-      if (EStorageType::kUnknown == fStorageType && readerArray.GetSize() > 1) {
+      constexpr auto isVectorBool = std::is_same<RVec<bool>, T>::value;
+
+      if (isVectorBool) {
+         fRVec.clear();
+         fRVec.reserve(readerArraySize);
+         for (auto &&v : readerArray)
+            fRVec.push_back(v);
+         return fRVec;
+      }
+
+      if (EStorageType::kUnknown == fStorageType && readerArraySize > 1) {
          // We can decide since the array is long enough
          fStorageType = (1 == (&readerArray[1] - &readerArray[0])) ? EStorageType::kContiguous : EStorageType::kSparse;
       }
 
-      const auto readerArraySize = readerArray.GetSize();
       if (EStorageType::kContiguous == fStorageType ||
-          (EStorageType::kUnknown == fStorageType && readerArray.GetSize() < 2)) {
+          (EStorageType::kUnknown == fStorageType && readerArraySize < 2)) {
          if (readerArraySize > 0) {
             // trigger loading of the contens of the TTreeReaderArray
             // the address of the first element in the reader array is not necessarily equal to

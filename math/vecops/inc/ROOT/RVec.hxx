@@ -22,10 +22,12 @@
 #endif
 
 #include <ROOT/RAdoptAllocator.hxx>
+#include <ROOT/TSpinMutex.hxx>
 #include <ROOT/TypeTraits.hxx>
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <numeric> // for inner_product
 #include <sstream>
 #include <stdexcept>
@@ -37,6 +39,23 @@
 #endif
 
 namespace ROOT {
+
+namespace VecOps {
+   template<typename T>
+   class RVec;
+} // End of VecOps NS
+
+namespace Internal {
+
+namespace VecOps {
+
+template<typename T>
+T* GetAdoptedData(::ROOT::VecOps::RVec<T> &v);
+inline bool* GetAdoptedData(::ROOT::VecOps::RVec<bool> &v);
+
+} // End of VecOps NS
+
+} // End of VecOps Internal
 
 namespace VecOps {
 // clang-format off
@@ -140,6 +159,7 @@ hpt->Draw();
 // clang-format on
 template <typename T>
 class RVec {
+   template<typename U> friend U* ROOT::Internal::VecOps::GetAdoptedData(::ROOT::VecOps::RVec<U> &v);
 public:
    using Impl_t = typename std::vector<T, ::ROOT::Detail::VecOps::RAdoptAllocator<T>>;
    using value_type = typename Impl_t::value_type;
@@ -276,6 +296,169 @@ public:
    void resize(size_type count) { fData.resize(count); }
    void resize(size_type count, const value_type &value) { fData.resize(count, value); }
    void swap(RVec<T> &other) { std::swap(fData, other.fData); }
+};
+
+template <>
+class RVec<bool> {
+public:
+   using Impl_t = typename std::vector<bool>;
+   using value_type = typename Impl_t::value_type;
+   using size_type = typename Impl_t::size_type;
+   using difference_type = typename Impl_t::difference_type;
+   using reference = typename Impl_t::reference;
+   using const_reference = typename Impl_t::const_reference;
+   using pointer = typename Impl_t::pointer;
+   using const_pointer = typename Impl_t::const_pointer;
+   using iterator = typename Impl_t::iterator;
+   using const_iterator = typename Impl_t::const_iterator;
+   using reverse_iterator = typename Impl_t::reverse_iterator;
+   using const_reverse_iterator = typename Impl_t::const_reverse_iterator;
+
+private:
+   static constexpr size_type fgMaxSize = 8192U;
+   Impl_t fData;
+   mutable bool *fAdoptedArray{nullptr};
+   mutable ROOT::TSpinMutex fSpinMutex;
+   bool* dataImpl() const
+   {
+      const auto n = fData.size();
+      if (fgMaxSize < n) {
+         std::string msg = "The buffer to be adopted is too large (";
+         msg += std::to_string(n);
+         msg += " and the maximum lenght is ";
+         msg += std::to_string(fgMaxSize);
+         msg += ")";
+         throw std::runtime_error(msg);
+      }
+
+      {
+         const std::lock_guard<ROOT::TSpinMutex> guard(fSpinMutex);
+         if (!fAdoptedArray) fAdoptedArray = new bool(n);
+         for (size_type i=0;i<n;++i) {
+            fAdoptedArray[i] = fData[i];
+         }
+      }
+      return fAdoptedArray;
+   }
+
+public:
+   // constructors
+   RVec() {}
+
+   ~RVec() { if (fAdoptedArray) delete fAdoptedArray; }
+
+   explicit RVec(size_type count) : fData(count) {}
+
+   RVec(size_type count, const bool value) : fData(count, value) {}
+
+   RVec(const RVec<bool> &v) : fData(v.fData) {}
+
+   RVec(RVec<bool> &&v) : fData(std::move(v.fData)) {}
+
+   RVec(const std::vector<bool> &v) : fData(v.cbegin(), v.cend()) {}
+
+   RVec(bool *p, size_type n) : fData(n)
+   {
+      for (size_type i=0;i<n;++i) fData[i] = p[i];
+   }
+
+   template <class InputIt>
+   RVec(InputIt first, InputIt last) : fData(first, last) {}
+
+   RVec(std::initializer_list<bool> init) : fData(init) {}
+
+   // assignment
+   RVec<bool> &operator=(const RVec<bool> &v)
+   {
+      fData = v.fData;
+      return *this;
+   }
+
+   RVec<bool> &operator=(RVec<bool> &&v)
+   {
+      std::swap(fData, v.fData);
+      std::swap(fAdoptedArray, v.fAdoptedArray);
+      return *this;
+   }
+
+   RVec<bool> &operator=(std::initializer_list<bool> ilist)
+   {
+      fData = ilist;
+      return *this;
+   }
+
+   // conversion
+   template <typename U, typename = std::enable_if<std::is_convertible<bool, U>::value>>
+   operator RVec<U>() const
+   {
+      RVec<U> ret(size());
+      std::copy(begin(), end(), ret.begin());
+      return ret;
+   }
+
+   // accessors
+   bool at(size_type pos) { return fData.at(pos); }
+   bool at(size_type pos) const { return fData.at(pos); }
+   bool operator[](size_type pos) { return fData[pos]; }
+   bool operator[](size_type pos) const { return fData[pos]; }
+
+   template <typename V, typename = std::enable_if<std::is_convertible<V, bool>::value>>
+   RVec operator[](const RVec<V> &conds) const
+   {
+      const size_type n = conds.size();
+
+      if (n != size())
+         throw std::runtime_error("Cannot index RVec with condition vector of different size");
+
+      RVec<bool> ret;
+      ret.reserve(n);
+      for (size_type i = 0; i < n; ++i)
+         if (conds[i])
+            ret.push_back(fData[i]);
+      return ret;
+   }
+
+   reference front() { return fData.front(); }
+   const_reference front() const { return fData.front(); }
+   reference back() { return fData.back(); }
+   const_reference back() const { return fData.back(); }
+   bool *data()
+   {
+      return dataImpl();
+   }
+   const bool *data() const
+   {
+      return dataImpl();
+   }
+   // iterators
+   iterator begin() noexcept { return fData.begin(); }
+   const_iterator begin() const noexcept { return fData.begin(); }
+   const_iterator cbegin() const noexcept { return fData.cbegin(); }
+   iterator end() noexcept { return fData.end(); }
+   const_iterator end() const noexcept { return fData.end(); }
+   const_iterator cend() const noexcept { return fData.cend(); }
+   reverse_iterator rbegin() noexcept { return fData.rbegin(); }
+   const_reverse_iterator rbegin() const noexcept { return fData.rbegin(); }
+   const_reverse_iterator crbegin() const noexcept { return fData.crbegin(); }
+   reverse_iterator rend() noexcept { return fData.rend(); }
+   const_reverse_iterator rend() const noexcept { return fData.rend(); }
+   const_reverse_iterator crend() const noexcept { return fData.crend(); }
+   // capacity
+   bool empty() const noexcept { return fData.empty(); }
+   size_type size() const noexcept { return fData.size(); }
+   size_type max_size() const noexcept { return fData.size(); }
+   void reserve(size_type new_cap) { fData.reserve(new_cap); }
+   size_type capacity() const noexcept { return fData.capacity(); }
+   void shrink_to_fit() { fData.shrink_to_fit(); };
+   // modifiers
+   void clear() noexcept { fData.clear(); }
+   iterator erase(iterator pos) { return fData.erase(pos); }
+   iterator erase(iterator first, iterator last) { return fData.erase(first, last); }
+   void push_back(bool &&value) { fData.push_back(std::forward<bool>(value)); }
+   void pop_back() { fData.pop_back(); }
+   void resize(size_type count) { fData.resize(count); }
+   void resize(size_type count, const value_type &value) { fData.resize(count, value); }
+   void swap(RVec<bool> &other) { std::swap(fData, other.fData); std::swap(fAdoptedArray, other.fAdoptedArray); }
 };
 
 ///@name RVec Unary Arithmetic Operators
@@ -645,7 +828,7 @@ RVec<T> Filter(const RVec<T> &v, F &&f)
 template <typename T>
 auto Any(const RVec<T> &v) -> decltype(v[0] == true)
 {
-   for (auto &e : v)
+   for (auto &&e : v)
       if (e == true)
          return true;
    return false;
@@ -655,7 +838,7 @@ auto Any(const RVec<T> &v) -> decltype(v[0] == true)
 template <typename T>
 auto All(const RVec<T> &v) -> decltype(v[0] == false)
 {
-   for (auto &e : v)
+   for (auto &&e : v)
       if (e == false)
          return false;
    return true;

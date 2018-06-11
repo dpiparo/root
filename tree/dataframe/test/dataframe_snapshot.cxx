@@ -75,17 +75,25 @@ protected:
          const unsigned int fixedSize = 4u;
          float fixedSizeArr[fixedSize];
          t.Branch("fixedSizeArr", fixedSizeArr, ("fixedSizeArr[" + std::to_string(fixedSize) + "]/F").c_str());
+         bool fixedSizeArrBool[fixedSize];
+         t.Branch("fixedSizeArrBool", fixedSizeArrBool, ("fixedSizeArrBool[" + std::to_string(fixedSize) + "]/O").c_str());
          unsigned int size = 0u;
          t.Branch("size", &size);
          double varSizeArr[kNEvents + 1];
          t.Branch("varSizeArr", varSizeArr, "varSizeArr[size]/D");
+         bool varSizeArrBool[kNEvents + 1];
+         t.Branch("varSizeArrBool", varSizeArrBool, "varSizeArrBool[size]/O");
          // for each event, fill array elements
          for (auto i : ROOT::TSeqU(eventsPerFile)) {
-            for (auto j : ROOT::TSeqU(4))
+            for (auto j : ROOT::TSeqU(4)) {
                fixedSizeArr[j] = curEvent * j;
+               fixedSizeArrBool[j] = (0 == j % 2);
+            }
             size = eventsPerFile - i;
-            for (auto j : ROOT::TSeqU(size))
+            for (auto j : ROOT::TSeqU(size)) {
                varSizeArr[j] = curEvent * j;
+               varSizeArrBool[j] = 0 == j % 2;
+            }
             t.Fill();
             ++curEvent;
          }
@@ -234,6 +242,8 @@ void checkSnapshotArrayFile(RResultPtr<RInterface<RLoopManager>> &df, unsigned i
    // fixedSizeArr and varSizeArr are RResultPtr<vector<vector<T>>>
    auto fixedSizeArr = df->Take<RVec<float>>("fixedSizeArr");
    auto varSizeArr = df->Take<RVec<double>>("varSizeArr");
+   auto fixedSizeArrBool = df->Take<RVec<bool>>("fixedSizeArrBool");
+   auto varSizeArrBool = df->Take<RVec<bool>>("varSizeArrBool");
    auto size = df->Take<unsigned int>("size");
 
    // check contents of fixedSizeArr
@@ -254,6 +264,30 @@ void checkSnapshotArrayFile(RResultPtr<RInterface<RLoopManager>> &df, unsigned i
       for (auto j = 0u; j < thisSize; ++j)
          EXPECT_DOUBLE_EQ(v[j], i * j);
    }
+
+   // And the booleans
+   bool ref;
+   for (auto i = 0u; i < nEvents; ++i) {
+      std::cout << "Testing Fixed Size, evt " << i << "\n";
+      ref = true;
+      auto &arr = fixedSizeArrBool->at(i);
+      std::cout << " - Full arr " << arr << std::endl;
+      for (auto b : arr) {
+         std::cout << "  + cont: " << b << " ref: " << ref << std::endl;
+         EXPECT_EQ(ref, b);
+         ref = !ref;
+      }
+   }
+/*
+   for (auto i = 0u; i < nEvents; ++i) {
+      ref = false;
+      std::cout << "varSizeArrBool: " << varSizeArrBool->at(i) << std::endl;
+      for (auto b : varSizeArrBool->at(i)) {
+         EXPECT_EQ(ref, b);
+         ref = !ref;
+      }
+   }
+   */
 }
 
 TEST_F(RDFSnapshotArrays, SingleThread)
@@ -261,8 +295,8 @@ TEST_F(RDFSnapshotArrays, SingleThread)
    RDataFrame tdf("arrayTree", kFileNames);
    // template Snapshot
    // "size" _must_ be listed before "varSizeArr"!
-   auto dt = tdf.Snapshot<RVec<float>, unsigned int, RVec<double>>(
-      "outTree", "test_snapshotRVecout.root", {"fixedSizeArr", "size", "varSizeArr"});
+   auto dt = tdf.Snapshot<RVec<float>, RVec<bool>, unsigned int, RVec<double>, RVec<bool>>(
+      "outTree", "test_snapshotRVecout.root", {"fixedSizeArr", "fixedSizeArrBool", "size", "varSizeArr", "varSizeArrBool"});
 
    checkSnapshotArrayFile(dt, kNEvents);
 }
@@ -272,7 +306,7 @@ TEST_F(RDFSnapshotArrays, SingleThreadJitted)
    RDataFrame tdf("arrayTree", kFileNames);
    // jitted Snapshot
    // "size" _must_ be listed before "varSizeArr"!
-   auto dj = tdf.Snapshot("outTree", "test_snapshotRVecout.root", {"fixedSizeArr", "size", "varSizeArr"});
+   auto dj = tdf.Snapshot("outTree", "test_snapshotRVecout.root", {"fixedSizeArr", "fixedSizeArrBool", "size", "varSizeArr", "varSizeArrBool"});
 
    checkSnapshotArrayFile(dj, kNEvents);
 }
