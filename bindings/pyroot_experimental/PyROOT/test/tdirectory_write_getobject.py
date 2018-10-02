@@ -54,19 +54,24 @@ class TDirectoryWriteAndGetObject(unittest.TestCase):
        self.assertEqual(st.myint2, self.stm2)
 
     # Tests
-    def test_histo_read(self):
-
+    def test_histo_directory_get(self):
        h = self.directory.Get(self.histName)
        self.check_histo(h)
 
-    def test_obj_read(self):
+    def test_histo_directory_attrsyntax(self):
+       h = self.directory.myHist
+       self.check_histo(h)
+
+    def test_obj_file_get(self):
        f = ROOT.TFile(self.filename)
-       f.ls()
        d = f.Get(self.dirName)
-       d.ls()
-       st = f.myDir.Get("stKey")
-       print st
-       #self.check_st(st)
+       st = d.Get(self.stKeyName)
+       self.check_st(st)
+
+    def test_obj_file_attrsyntax(self):
+       f = ROOT.TFile(self.filename)
+       st = f.myDir.stKey
+       self.check_st(st)
 
 if __name__ == '__main__':
     unittest.main()

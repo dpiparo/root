@@ -98,10 +98,16 @@ PyObject *TDirectoryGet(CPPInstance *self, PyObject *pynamecycle)
 }
 
 ////////////////////////////////////////////////////////////////////////////
-/// \brief Add pythonizations to the TDirectory class.
+/// \brief Add attr syntax to TDirectory
 /// \param[in] self Always null, since this is a module function.
 /// \param[in] args Pointer to a Python tuple object containing the arguments
-PyObject *PyROOT::AddDirectoryGetPyz(PyObject * /* self */, PyObject *args)
+/// This allows to use TDirectory and daughters (such as TDirectoryFile and TFile)
+/// as follows
+/// ~~~{.python}
+/// myfile.mydir.mysubdir.myHist.Draw()
+/// ~~~
+
+PyObject *PyROOT::AddDirectoryAttrSyntaxPyz(PyObject * /* self */, PyObject *args)
 {
    PyObject *pyclass = PyTuple_GetItem(args, 0);
 

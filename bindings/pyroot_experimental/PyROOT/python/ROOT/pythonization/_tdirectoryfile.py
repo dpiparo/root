@@ -8,7 +8,6 @@
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
 
-from libROOTPython import AddFileOpenPyz
 from ._tdirectory import _TDirectory_Get as TDirectory_Get
 from ROOT import pythonization
 
@@ -16,8 +15,7 @@ from ROOT import pythonization
 @pythonization()
 def pythonize_tfile(klass, name):
 
-    if name == 'TFile':
-       AddFileOpenPyz(klass)
+    if name == 'TDirectoryFile':
        klass.Get = TDirectory_Get
 
     return True

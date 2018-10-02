@@ -37,11 +37,8 @@ static PyMethodDef gPyROOTMethods[] ={
 {(char *)"AddDirectoryWritePyz", (PyCFunction)PyROOT::AddDirectoryWritePyz, METH_VARARGS,
  (char *)"Pythonization of TDirectory::WriteObject"},
 
-{(char *)"AddDirectoryGetPyz", (PyCFunction)PyROOT::AddDirectoryGetPyz, METH_VARARGS,
- (char *)"Pythonization of TDirectory::Get"},
-
-{(char *)"AddFileAttrSyntax", (PyCFunction)PyROOT::AddFileAttrSyntax, METH_VARARGS,
- (char *)"Pythonization for the GetAttr method of TFile"},
+{(char *)"AddDirectoryAttrSyntaxPyz", (PyCFunction)PyROOT::AddDirectoryAttrSyntaxPyz, METH_VARARGS,
+ (char *)"Attr syntax for TDirectory"},
 
 {(char *)"AddFileOpenPyz", (PyCFunction)PyROOT::AddFileOpenPyz, METH_VARARGS,
  (char *)"Pythonization of TFile::Open"},
