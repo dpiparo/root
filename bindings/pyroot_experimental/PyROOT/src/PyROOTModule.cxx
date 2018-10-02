@@ -34,14 +34,17 @@ static PyMethodDef gPyROOTMethods[] ={
 {(char *)"SetBranchAddressPyz", (PyCFunction)PyROOT::SetBranchAddressPyz, METH_VARARGS,
  (char *)"Pythonization for TTree::SetBranchAddress"},
 
-{(char *)"PythonizeTDirectory", (PyCFunction)PyROOT::PythonizeTDirectory, METH_VARARGS,
- (char *)"Pythonizations for class TDirectory"},
+{(char *)"AddDirectoryWritePyz", (PyCFunction)PyROOT::AddDirectoryWritePyz, METH_VARARGS,
+ (char *)"Pythonization of TDirectory::WriteObject"},
 
-{(char *)"PythonizeTDirectoryFile", (PyCFunction)PyROOT::PythonizeTDirectoryFile, METH_VARARGS,
- (char *)"Pythonizations for class TDirectoryFile"},
+{(char *)"AddDirectoryGetPyz", (PyCFunction)PyROOT::AddDirectoryGetPyz, METH_VARARGS,
+ (char *)"Pythonization of TDirectory::Get"},
 
-{(char *)"PythonizeTFile", (PyCFunction)PyROOT::PythonizeTFile, METH_VARARGS,
- (char *)"Pythonizations for class TFile"},
+{(char *)"AddFileAttrSyntax", (PyCFunction)PyROOT::AddFileAttrSyntax, METH_VARARGS,
+ (char *)"Pythonization for the GetAttr method of TFile"},
+
+{(char *)"AddFileOpenPyz", (PyCFunction)PyROOT::AddFileOpenPyz, METH_VARARGS,
+ (char *)"Pythonization of TFile::Open"},
 
 {(char *)"AddPrettyPrintingPyz", (PyCFunction)PyROOT::AddPrettyPrintingPyz, METH_VARARGS,
  (char *)"Add pretty printing pythonization"},

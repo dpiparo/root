@@ -5,7 +5,7 @@ import ROOT
 from libcppyy import SetOwnership
 
 
-class TFileUnits(unittest.TestCase):
+class TFileOpenAndGetattrSyntax(unittest.TestCase):
     """
     Test for the pythonizations of TFile
     """
@@ -22,14 +22,13 @@ class TFileUnits(unittest.TestCase):
     def setUpClass(cls):
        f0 = ROOT.TFile.Open(cls.filename0, "RECREATE")
        h = ROOT.TH1F(cls.histname, cls.histname, cls.nbins, cls.minx, cls.maxx)
-       SetOwnership(h, False) # Is this a bug in cppyy?
+       SetOwnership(h, False)
        h.Write()
        f0.Close()
 
-       f1 = ROOT.TFile.Open(cls.filename1, "RECREATE")
        h = ROOT.TH1F(cls.histname, cls.histname, cls.nbins, cls.minx, cls.maxx)
-       SetOwnership(h, False) # Is this a bug in cppyy?
-       h.Write()
+       f1 = ROOT.TFile.Open(cls.filename1, "RECREATE")
+       f1.WriteObject(h, cls.histname)
        f1.Close()
 
     # Helpers
@@ -44,6 +43,8 @@ class TFileUnits(unittest.TestCase):
     def get_histo_and_check(self, f):
         h = f.myHist
         self.check_histo(h)
+        hh = f.Get("myHist")
+        self.check_histo(hh)
 
     # Tests
     def test_read0(self):

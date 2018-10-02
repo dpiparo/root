@@ -8,13 +8,15 @@
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
 
-from libROOTPython import PythonizeTFile
+from libROOTPython import AddFileOpenPyz, AddFileAttrSyntax
 from ROOT import pythonization
 
 # Pythonizor function
-@pythonization
+@pythonization()
 def pythonize_tfile(klass, name):
 
-    if name == 'TFile': PythonizeTFile(klass)
+    if name == 'TFile':
+       AddFileAttrSyntax(klass)
+       AddFileOpenPyz(klass)
 
     return True

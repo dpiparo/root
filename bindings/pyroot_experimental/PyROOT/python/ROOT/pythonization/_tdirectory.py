@@ -8,16 +8,18 @@
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
 
-from libROOTPython import PythonizeTDirectory
-from ROOT import instant_pythonization
+from libROOTPython import AddDirectoryGetPyz, AddDirectoryWritePyz
+from ROOT import pythonization
 import cppyy
 
 # This is an instant pythonization. As such, no argument is needed since we know
 # what we are pythonizing.
 
-@instant_pythonization
+@pythonization(lazy = False)
 def pythonize_tdirectory():
 
-    PythonizeTDirectory(cppyy.gbl.TDirectory)
+    tdirectoryClass = cppyy.gbl.TDirectory
+    AddDirectoryGetPyz(tdirectoryClass)
+    AddDirectoryWritePyz(tdirectoryClass)
 
     return True
