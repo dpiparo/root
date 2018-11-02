@@ -905,9 +905,10 @@ public:
    template <typename V = RDFDetail::RInferredType>
    RResultPtr<::TH1D> Histo1D(std::string_view vName)
    {
-      auto h_name_title = std::string(vName);
-      auto h_nt_cstr = h_name_title.c_str();
-      return Histo1D<V>({h_nt_cstr, h_nt_cstr, 128u, 0., 0.}, vName);
+      auto h_name = std::string(vName);
+      auto h_title = std::string(vName);
+      h_title += ";" + h_name + ";";
+      return Histo1D<V>({h_name.c_str(), h_title.c_str(), 128u, 0., 0.}, vName);
    }
 
    ////////////////////////////////////////////////////////////////////////////
@@ -950,11 +951,12 @@ public:
    RResultPtr<::TH1D> Histo1D(std::string_view vName, std::string_view wName)
    {
       // We build name and title based on the value and weight column names
-      auto h_name_title = std::string(vName);
-      h_name_title += "_";
-      h_name_title += wName;
-      auto h_nt_cstr = h_name_title.c_str();
-      return Histo1D<V, W>({h_nt_cstr, h_nt_cstr, 128u, 0., 0.}, vName, wName);
+      auto h_name = std::string(vName);
+      auto h_title = std::string(vName);
+      h_title += "_";
+      h_title += wName;
+      h_title += ";" + h_name + ";";
+      return Histo1D<V, W>({h_name.c_str(), h_title.c_str(), 128u, 0., 0.}, vName, wName);
    }
 
    ////////////////////////////////////////////////////////////////////////////
@@ -1149,11 +1151,12 @@ public:
 
       // We build a default name and title based on the input columns
       if (!(userColumns[0].empty() && userColumns[1].empty())) {
-         auto g_name_title = std::string(v1Name);
-         g_name_title += "_";
-         g_name_title += v2Name;
-         auto g_name_title_char_ptr = g_name_title.c_str();
-         graph->SetNameTitle(g_name_title_char_ptr, g_name_title_char_ptr);
+         auto g_name = std::string(v1Name);
+         auto v2Name_str = std::string(v2Name);
+         g_name += "_";
+         g_name += v2Name_str;
+         auto g_title = g_name + "_" + v2Name_str + ";" + g_name + ";" + v2Name_str;
+         graph->SetNameTitle(g_name.c_str(), g_title.c_str());
       }
 
       return CreateAction<RDFInternal::ActionTags::Graph, V1, V2>(userColumns, graph);
