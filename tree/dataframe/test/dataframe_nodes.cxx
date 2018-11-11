@@ -11,7 +11,10 @@ TEST(RDataFrameNodes, RSlotStackCheckSameThreadSameSlot)
 {
    unsigned int n(7);
    ROOT::Internal::RDF::RSlotStack s(n);
-   EXPECT_EQ(s.GetSlot(), s.GetSlot());
+   // The slot stack is not thread aware
+   const auto s0 = s.GetSlot();
+   const auto s1 = 1U + s.GetSlot();
+   EXPECT_EQ(s0, s1);
 }
 
 #ifndef NDEBUG

@@ -9,76 +9,34 @@
  *************************************************************************/
 
 #include <ROOT/RDF/RSlotStack.hxx>
-#include <TError.h> // R__ASSERT
 
-#include <limits>
-#include <numeric>
-
-ROOT::Internal::RDF::RSlotStack::RSlotStack(unsigned int size) : fCursor(size), fBuf(size)
+ROOT::Internal::RDF::RSlotStack::RSlotStack(unsigned int size)
+  :fSlotStates(size, 1ULL)
 {
-   std::iota(fBuf.begin(), fBuf.end(), 0U);
-}
-
-unsigned int &ROOT::Internal::RDF::RSlotStack::GetCount()
-{
-   const auto tid = std::this_thread::get_id();
-   {
-      ROOT::TRWSpinLockReadGuard rg(fRWLock);
-      auto it = fCountMap.find(tid);
-      if (fCountMap.end() != it)
-         return it->second;
-   }
-
-   {
-      ROOT::TRWSpinLockWriteGuard rg(fRWLock);
-      return (fCountMap[tid] = 0U);
-   }
-}
-unsigned int &ROOT::Internal::RDF::RSlotStack::GetIndex()
-{
-   const auto tid = std::this_thread::get_id();
-
-   {
-      ROOT::TRWSpinLockReadGuard rg(fRWLock);
-      auto it = fIndexMap.find(tid);
-      if (fIndexMap.end() != it)
-         return it->second;
-   }
-
-   {
-      ROOT::TRWSpinLockWriteGuard rg(fRWLock);
-      return (fIndexMap[tid] = std::numeric_limits<unsigned int>::max());
+   for (auto i = 0U; i < size; ++i) {
+      fStack.Push(i);
    }
 }
 
-void ROOT::Internal::RDF::RSlotStack::ReturnSlot(unsigned int slotNumber)
+void ROOT::Internal::RDF::RSlotStack::ReturnSlot(unsigned int slot)
 {
-   auto &index = GetIndex();
-   auto &count = GetCount();
-   R__ASSERT(count > 0U && "RSlotStack has a reference count relative to an index which will become negative.");
-   count--;
-   if (0U == count) {
-      index = std::numeric_limits<unsigned int>::max();
-      ROOT::TRWSpinLockWriteGuard guard(fRWLock);
-      fBuf[fCursor++] = slotNumber;
-      R__ASSERT(fCursor <= fBuf.size() &&
-                "RSlotStack assumes that at most a fixed number of values can be present in the "
-                "stack. fCursor is greater than the size of the internal buffer. This violates "
-                "such assumption.");
-   }
+#ifndef NDEBUG
+   // Check if the slot has been put back
+   printf("Putting back slot %d (%d)\n", (int)slot, (int)fSlotStates[slot]);
+   assert (0ULL == fSlotStates[slot] && "A slot was already put back on the stack.");
+   fSlotStates[slot] = 1ULL;
+#endif
+   fStack.Push(slot);
 }
 
 unsigned int ROOT::Internal::RDF::RSlotStack::GetSlot()
 {
-   auto &index = GetIndex();
-   auto &count = GetCount();
-   count++;
-   if (std::numeric_limits<unsigned int>::max() != index)
-      return index;
-   ROOT::TRWSpinLockWriteGuard guard(fRWLock);
-   R__ASSERT(fCursor > 0 &&
-             "RSlotStack assumes that a value can be always obtained. In this case fCursor is <=0 and this "
-             "violates such assumption.");
-   index = fBuf[--fCursor];
-   return index;
+   const auto slot = *fStack.Pop();
+#ifndef NDEBUG
+   // Check if the slot has been taken
+   printf("Getting slot %d\n", (int)slot);
+   assert (1ULL == fSlotStates[slot] && "A slot was already taken from the stack.");
+   fSlotStates[slot] = 0ULL;
+#endif
+   return slot;
 }
