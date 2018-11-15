@@ -591,3 +591,7 @@ These changes will be part of the future 6.14/08
 ## Core Libraries
   - The minimal TBB library version required by ROOT is tbb2018. The built-in TBB version is tbb2019
   - Tasks spawned by TThreadedExecutor are now isolated exploiting the TBB work isolation feature. This avoids that tasks steal items of work spawned by their parents.
+
+## Math Libraries
+  - The built-in VDT library version was changed from v0.4.1 ro v0.4.2
+
