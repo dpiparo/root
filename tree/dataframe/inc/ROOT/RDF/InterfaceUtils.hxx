@@ -44,11 +44,11 @@ namespace Detail {
 namespace RDF {
 class RNodeBase;
 }
-}
+} // namespace Detail
 namespace RDF {
 template <typename T>
 class RResultPtr;
-template<typename T, typename V>
+template <typename T, typename V>
 class RInterface;
 using RNode = RInterface<::ROOT::Detail::RDF::RNodeBase, void>;
 class RDataSource;
@@ -66,6 +66,30 @@ using namespace ROOT::RDF;
 namespace TTraits = ROOT::TypeTraits;
 namespace RDFInternal = ROOT::Internal::RDF;
 
+// Check if type is a tuple
+template <typename> struct IsTuple: std::false_type {};
+template <typename ...T> struct IsTuple<std::tuple<T...>>: std::true_type {};
+
+// Helper to define recursively based on the content of a tuple
+template <typename Tuple_t, size_t I>
+struct DefineFromTuple {
+   template <typename Node_t>
+   static Node_t Call(Node_t &node, const ColumnNames_t &names, std::string_view tupleColName)
+   {
+      node = node.Define(names[I], [](const Tuple_t &t) { return std::get<I>(t); });
+      return DefineFromTuple<Node_t, Tuple_t, I - 1>(node, names, tupleColName);
+   }
+};
+
+template <typename Tuple_t>
+struct DefineFromTuple<Tuple_t, 0> {
+   template <typename Node_t>
+   static Node_t Call(Node_t &node, const ColumnNames_t &names, std::string_view tupleColName)
+   {
+      return node.Define(names[0], [](const Tuple_t &t) { return std::get<0>(t); });
+   }
+};
+
 // Declare code in the interpreter via the TInterpreter::Declare method
 // and return the return code.
 bool InterpreterDeclare(const std::string &code);
@@ -80,19 +104,14 @@ std::pair<Long64_t, int> InterpreterCalc(const std::string &code);
 bool IsImplicitMTEnabled();
 
 using HeadNode_t = ::ROOT::RDF::RResultPtr<RInterface<RLoopManager, void>>;
-HeadNode_t CreateSnaphotRDF(const ColumnNames_t &validCols,
-                            std::string_view treeName,
-                            std::string_view fileName,
-                            bool isLazy,
-                            RLoopManager &loopManager,
+HeadNode_t CreateSnaphotRDF(const ColumnNames_t &validCols, std::string_view treeName, std::string_view fileName,
+                            bool isLazy, RLoopManager &loopManager,
                             std::unique_ptr<RDFInternal::RActionBase> actionPtr);
 
 std::string DemangleTypeIdName(const std::type_info &typeInfo);
 
-ColumnNames_t ConvertRegexToColumns(RDFInternal::RBookedCustomColumns & customColumns,
-                                    TTree *tree,
-                                    ROOT::RDF::RDataSource *dataSource,
-                                    std::string_view columnNameRegexp,
+ColumnNames_t ConvertRegexToColumns(RDFInternal::RBookedCustomColumns &customColumns, TTree *tree,
+                                    ROOT::RDF::RDataSource *dataSource, std::string_view columnNameRegexp,
                                     std::string_view callerName);
 
 /// An helper object that sets and resets gErrorIgnoreLevel via RAII.

@@ -291,6 +291,19 @@ public:
    // clang-format on
 
    // clang-format off
+   template <typename F, typename std::enable_if<!std::is_convertible<F, std::string>::value, int>::type = 0>
+   RInterface<Proxied, DS_t> MultiDefine(const ColumnNames_t &names, F expression, const ColumnNames_t &columns = {})
+   {
+      using Tuple_t = typename TTraits::CallableTraits<Merge>::ret_type;
+      static_assert(RDFInternal::IsTuple<Tuple_t>, "Multidefine: the type returned by the expression is not a std::tuple.");
+      const auto tupleColName = std::accumulate(names.begin(), names.end(), "");
+      auto tupleNode = DefineImpl<F, RDFDetail::CustomColExtraArgs::None>(tupleColName, std::move(expression), columns);
+      constexpr const auto tupleSize = Tuple_t::tuple_size;
+      return RDFInternal::DefineFromTuple<Tuple_t, tupleSize>::Call(tupleNode, names, tupleColName);
+   }
+   // clang-format on
+
+   // clang-format off
    ////////////////////////////////////////////////////////////////////////////
    /// \brief Creates a custom column with a value dependent on the processing slot.
    /// \param[in] name The name of the custom column.
