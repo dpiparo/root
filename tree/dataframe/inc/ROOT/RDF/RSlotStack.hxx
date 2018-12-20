@@ -11,6 +11,8 @@
 #ifndef ROOT_RSLOTSTACK
 #define ROOT_RSLOTSTACK
 
+#include "RtypesCore.h"
+
 #include <atomic>
 #include <memory>
 
@@ -23,62 +25,68 @@ template <typename T>
 class RLockFreeStack {
 private:
    struct RNode;
-   struct counted_node_ptr {
-      int external_count;
-      RNode *ptr;
+   struct RCountedNode {
+      RNode *fPtr;
+      Long64_t fExternalCount; // to avoid padding
    };
+
    struct RNode {
-      std::shared_ptr<T> data;
-      std::atomic<int> internal_count;
-      counted_node_ptr next;
-      RNode(T const &data_) : data(std::make_shared<T>(data_)), internal_count(0) {}
+      RNode() : fNext(new RCountedNode) {}
+      ~RNode() { delete fNext; }
+      std::shared_ptr<T> fData;
+      std::atomic<int> fInternalCount;
+      RCountedNode *fNext;
+      RNode(T const &data_) : fData(std::make_shared<T>(data_)), fInternalCount(0) {}
    };
-   std::atomic<counted_node_ptr> head;
-   void increase_head_count(counted_node_ptr &old_counter)
+
+   std::atomic<RCountedNode*> fHead;
+
+   void IncreaseHeadCount(RCountedNode *old_counter)
    {
-      counted_node_ptr new_counter;
+      auto new_counter = new RCountedNode();
       do {
-         new_counter = old_counter;
-         ++new_counter.external_count;
-      } while (
-         !head.compare_exchange_strong(old_counter, new_counter, std::memory_order_acquire, std::memory_order_relaxed));
-      old_counter.external_count = new_counter.external_count;
+         new_counter->fPtr = old_counter->fPtr;
+         new_counter->fExternalCount = old_counter->fExternalCount;
+         ++new_counter->fExternalCount;
+      } while (!fHead.compare_exchange_strong(old_counter, new_counter, std::memory_order_acquire,
+                                              std::memory_order_relaxed));
+      old_counter->fExternalCount = new_counter->fExternalCount;
    }
 
 public:
    ~RLockFreeStack()
    {
-      while (Pop())
-         ;
+      while (Pop()) {
+      };
    }
    void Push(T const &data)
    {
-      counted_node_ptr new_node;
-      new_node.ptr = new RNode(data);
-      new_node.external_count = 1;
-      new_node.ptr->next = head.load(std::memory_order_relaxed);
-      while (!head.compare_exchange_weak(new_node.ptr->next, new_node, std::memory_order_release,
-                                         std::memory_order_relaxed));
+      auto new_node = new RCountedNode();
+      new_node->fPtr = new RNode(data);
+      new_node->fExternalCount = 1;
+      new_node->fPtr->fNext = fHead.load(std::memory_order_relaxed);
+      while (!fHead.compare_exchange_weak(new_node->fPtr->fNext, new_node, std::memory_order_release,
+                                          std::memory_order_relaxed)) {};
    }
    std::shared_ptr<T> Pop()
    {
-      counted_node_ptr old_head = head.load(std::memory_order_relaxed);
+      auto old_head = fHead.load(std::memory_order_relaxed);
       for (;;) {
-         increase_head_count(old_head);
-         auto *const ptr = old_head.ptr;
+         IncreaseHeadCount(old_head);
+         auto *const ptr = old_head->fPtr;
          if (!ptr) {
             return std::shared_ptr<T>();
          }
-         if (head.compare_exchange_strong(old_head, ptr->next, std::memory_order_relaxed)) {
+         if (fHead.compare_exchange_strong(old_head, ptr->fNext, std::memory_order_relaxed)) {
             std::shared_ptr<T> res;
-            res.swap(ptr->data);
-            int const count_increase = old_head.external_count - 2;
-            if (ptr->internal_count.fetch_add(count_increase, std::memory_order_release) == -count_increase) {
+            res.swap(ptr->fData);
+            const auto count_increase = old_head->fExternalCount - 2;
+            if (ptr->fInternalCount.fetch_add(count_increase, std::memory_order_release) == -count_increase) {
                delete ptr;
             }
             return res;
-         } else if (ptr->internal_count.fetch_add(-1, std::memory_order_relaxed) == 1) {
-            ptr->internal_count.load(std::memory_order_acquire);
+         } else if (ptr->fInternalCount.fetch_add(-1, std::memory_order_relaxed) == 1) {
+            ptr->fInternalCount.load(std::memory_order_acquire);
             delete ptr;
          }
       }
@@ -100,3 +108,4 @@ public:
 } // namespace ROOT
 
 #endif
+
