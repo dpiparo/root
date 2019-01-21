@@ -35,6 +35,21 @@ namespace ROOT {
 unsigned int TTreeProcessorMT::fgMaxTasksPerFilePerWorker = 24U;
 
 namespace Internal {
+
+/// Simple RAII object to regulate the ImplicitMT status
+class ImplicitMTRAII {
+   const bool fWasIMTEnabled;
+
+public:
+   ImplicitMTRAII() : fWasIMTEnabled(ROOT::IsImplicitMTEnabled()) {}
+   ~ImplicitMTRAII()
+   {
+      if (!fWasIMTEnabled) {
+         ROOT::DisableImplicitMT();
+      }
+   }
+};
+
 ////////////////////////////////////////////////////////////////////////
 /// Return a vector of cluster boundaries for the given tree and files.
 // EntryClusters and number of entries per file
@@ -369,6 +384,10 @@ void TTreeProcessorMT::Process(std::function<void(TTreeReader &)> func)
    // Retrieve number of entries for each file for each friend tree
    const auto friendEntries =
       hasFriends ? Internal::GetFriendEntries(friendNames, friendFileNames) : std::vector<std::vector<Long64_t>>{};
+
+   // Here we instantiate a ImplicitMTRAII. This allows to restore the IMT status after
+   // the processing.
+   Internal::ImplicitMTRAII imtRAII;
 
    TThreadExecutor pool;
    // Parent task, spawns tasks that process each of the entry clusters for each input file

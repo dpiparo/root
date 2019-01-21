@@ -158,7 +158,6 @@ TEST(TreeProcessorMT, MaxTasks)
       }
    };
 
-   ROOT::DisableImplicitMT();
    ROOT::EnableImplicitMT(4);
 
    ROOT::TTreeProcessorMT p(filename, treename);
