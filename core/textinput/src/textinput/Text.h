@@ -13,6 +13,8 @@
 //  Axel Naumann <axel@cern.ch>, 2011-05-12
 //===----------------------------------------------------------------------===//
 
+// TEST TES
+
 #ifndef TEXTINPUT_TEXT_H
 #define TEXTINPUT_TEXT_H
 #include <cstddef>
