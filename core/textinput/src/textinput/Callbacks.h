@@ -12,6 +12,8 @@
 //  Axel Naumann <axel@cern.ch>, 2011-05-12
 //===----------------------------------------------------------------------===//
 
+// TEST TEST
+
 #ifndef TEXTINPUT_CALLBACKS_H
 #define TEXTINPUT_CALLBACKS_H
 
