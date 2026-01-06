@@ -1818,7 +1818,7 @@ RooPlot* RooAbsData::plotOn(RooPlot* frame, const RooLinkedList& argList) const
 
   RooPlot* ret ;
   if (!asymCat && !effCat) {
-    ret = plotOn(frame,o) ;
+    ret = plotOnImpl(frame,o) ;
   } else if (asymCat) {
     ret = plotAsymOn(frame,*asymCat,o) ;
   } else {
@@ -1861,7 +1861,7 @@ RooPlot* RooAbsData::plotOn(RooPlot* frame, const RooLinkedList& argList) const
 ///
 /// The drawOptions are passed to the TH1::Draw() method.
 /// \see RooAbsData::plotOn(RooPlot*,const RooLinkedList&) const
-RooPlot *RooAbsData::plotOn(RooPlot *frame, PlotOpt o) const
+RooPlot *RooAbsData::plotOnImpl(RooPlot *frame, PlotOpt o) const
 {
   if(nullptr == frame) {
     coutE(Plotting) << ClassName() << "::" << GetName() << ":plotOn: frame is null" << std::endl;
@@ -1967,9 +1967,7 @@ RooPlot *RooAbsData::plotOn(RooPlot *frame, PlotOpt o) const
   return frame;
 }
 
-namespace {
-
-RooHist *createAndFillRooHist(RooAbsData const &absData, RooPlot const &frame, RooAbsRealLValue const &var,
+RooHist *RooAbsData::createAndFillRooHist(RooAbsData const &absData, RooPlot const &frame, RooAbsRealLValue const &var,
                               std::string cuts1, std::string cuts2, RooAbsData::PlotOpt opt, bool efficiency,
                               double scaleFactor)
 {
@@ -2002,8 +2000,6 @@ RooHist *createAndFillRooHist(RooAbsData const &absData, RooPlot const &frame, R
    // convert this histogram to a RooHist object on the heap
    return new RooHist(*hist1, *hist2, 0, 1, opt.etype, opt.xErrorSize, efficiency, scaleFactor);
 }
-
-} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create and fill a histogram with the asymmetry N[+] - N[-] / ( N[+] + N[-] ),

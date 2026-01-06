@@ -5,13 +5,14 @@
 #ifndef ROOT_RHist
 #define ROOT_RHist
 
+#include "RAxes.hxx" // for RAxisVariant
 #include "RBinIndex.hxx"
 #include "RHistEngine.hxx"
 #include "RHistStats.hxx"
+#include "RRegularAxis.hxx"
 #include "RWeight.hxx"
 
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
@@ -90,21 +91,21 @@ public:
    ///
    /// Copying all bin contents can be an expensive operation, depending on the number of bins. If required, users can
    /// explicitly call Clone().
-   RHist(const RHist<BinContentType> &) = delete;
+   RHist(const RHist &) = delete;
    /// Efficiently move construct a histogram.
    ///
    /// After this operation, the moved-from object is invalid.
-   RHist(RHist<BinContentType> &&) = default;
+   RHist(RHist &&) = default;
 
    /// The copy assignment operator is deleted.
    ///
    /// Copying all bin contents can be an expensive operation, depending on the number of bins. If required, users can
    /// explicitly call Clone().
-   RHist<BinContentType> &operator=(const RHist<BinContentType> &) = delete;
+   RHist &operator=(const RHist &) = delete;
    /// Efficiently move a histogram.
    ///
    /// After this operation, the moved-from object is invalid.
-   RHist<BinContentType> &operator=(RHist<BinContentType> &&) = default;
+   RHist &operator=(RHist &&) = default;
 
    ~RHist() = default;
 
@@ -177,7 +178,7 @@ public:
    /// Throws an exception if the axes configurations are not identical.
    ///
    /// \param[in] other another histogram
-   void Add(const RHist<BinContentType> &other)
+   void Add(const RHist &other)
    {
       fEngine.Add(other.fEngine);
       fStats.Add(other.fStats);
@@ -188,7 +189,7 @@ public:
    /// Throws an exception if the axes configurations are not identical.
    ///
    /// \param[in] other another histogram that must not be modified during the operation
-   void AddAtomic(const RHist<BinContentType> &other)
+   void AddAtomic(const RHist &other)
    {
       fEngine.AddAtomic(other.fEngine);
       fStats.AddAtomic(other.fStats);
@@ -206,9 +207,9 @@ public:
    /// Copying all bin contents can be an expensive operation, depending on the number of bins.
    ///
    /// \return the cloned object
-   RHist<BinContentType> Clone() const
+   RHist Clone() const
    {
-      RHist<BinContentType> h(fEngine.Clone());
+      RHist h(fEngine.Clone());
       h.fStats = fStats;
       return h;
    }

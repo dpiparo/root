@@ -8,6 +8,9 @@
 #include "RHist.hxx"
 #include "RHistEngine.hxx"
 #include "RHistStats.hxx"
+#include "RWeight.hxx"
+
+#include <tuple>
 
 namespace ROOT {
 namespace Experimental {
@@ -37,10 +40,10 @@ private:
 
    /// \sa RHistConcurrentFiller::CreateFillContent()
    explicit RHistFillContext(RHist<BinContentType> &hist) : fHist(&hist), fStats(hist.GetNDimensions()) {}
-   RHistFillContext(const RHistFillContext<BinContentType> &) = delete;
-   RHistFillContext(RHistFillContext<BinContentType> &&) = default;
-   RHistFillContext<BinContentType> &operator=(const RHistFillContext<BinContentType> &) = delete;
-   RHistFillContext<BinContentType> &operator=(RHistFillContext<BinContentType> &&) = default;
+   RHistFillContext(const RHistFillContext &) = delete;
+   RHistFillContext(RHistFillContext &&) = default;
+   RHistFillContext &operator=(const RHistFillContext &) = delete;
+   RHistFillContext &operator=(RHistFillContext &&) = default;
 
 public:
    ~RHistFillContext() { Flush(); }
