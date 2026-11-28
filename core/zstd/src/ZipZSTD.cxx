@@ -49,6 +49,14 @@ static const size_t errorCodeSmallBuffer = (size_t)-70;
 
 void R__zipZSTD(int cxlevel, int *srcsize, const char *src, int *tgtsize, char *tgt, int *irep)
 {
+
+   if (*srcsize > 0xffffff || *srcsize < 0) {
+      std::cerr << "Error in zip ZSTD. Input buffer size (" << *srcsize
+                << ") is not a supported size: min 0, max 0xffffff)";
+      *irep = 0;
+      return;
+   }
+
     using Ctx_ptr = std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)>;
     Ctx_ptr fCtx{ZSTD_createCCtx(), &ZSTD_freeCCtx};
 
