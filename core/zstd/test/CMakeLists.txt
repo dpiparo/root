@@ -1,0 +1,1 @@
+ROOT_ADD_GTEST(tests zstd_tests.cxx LIBRARIES Core)

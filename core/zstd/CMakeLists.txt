@@ -18,3 +18,5 @@ target_link_libraries(Core PRIVATE ZSTD::ZSTD)
 target_include_directories(Core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>)
 
 ROOT_INSTALL_HEADERS()
+
+ROOT_ADD_TEST_SUBDIRECTORY(test)
